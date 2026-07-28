@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Body } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
@@ -110,6 +110,8 @@ export function FolderList({
   const [newFolderName, setNewFolderName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FileItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   function navigate(path: string) {
@@ -154,6 +156,43 @@ export function FolderList({
     }
   }
 
+  async function uploadFiles(files: FileList) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const file of list) {
+        // 1) create the pending file, get its upload URL
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            companyId,
+            action: 'upload',
+            path: currentPath,
+            name: file.name,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || `Upload failed (${res.status})`);
+        }
+        const { uploadUrl } = await res.json();
+        // 2) PUT the bytes straight to storage
+        const put = await fetch(uploadUrl, { method: 'PUT', body: file });
+        if (!put.ok)
+          throw new Error(`Upload of "${file.name}" failed (${put.status})`);
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function changeStatus(folderId: string, statusId: string) {
     if (!channelId) return;
     setPendingId(folderId);
@@ -177,7 +216,29 @@ export function FolderList({
   }
 
   return (
-    <section>
+    <section
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragOver) setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
+      }}
+      className={
+        dragOver ? 'rounded-lg outline outline-2 outline-blue-400' : ''
+      }
+    >
+      {dragOver && (
+        <div className="mb-3 p-2 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-md">
+          Drop files to upload to this folder
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between gap-4">
         <nav className="flex items-center gap-1 text-sm text-gray-600 flex-wrap min-w-0">
           {breadcrumb.map((crumb, i) => (
@@ -194,6 +255,7 @@ export function FolderList({
           ))}
         </nav>
         <div className="flex items-center gap-2 shrink-0">
+          {busy && <span className="text-sm text-gray-500">Working…</span>}
           <button
             type="button"
             disabled={busy}
@@ -204,6 +266,24 @@ export function FolderList({
             className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             New folder
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) uploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+            className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            Upload
           </button>
         </div>
       </div>

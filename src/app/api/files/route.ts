@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     token?: string;
     companyId?: string;
-    action?: 'newFolder' | 'delete';
-    path?: string; // parent folder path (for newFolder) or item path (for delete)
+    action?: 'upload' | 'newFolder' | 'delete';
+    path?: string; // parent folder path (newFolder/upload) or item path (delete)
     name?: string; // new folder/file name
     fileId?: string; // item id (for delete)
     object?: 'folder' | 'file' | 'link';
@@ -36,6 +36,28 @@ export async function POST(request: Request) {
 
   try {
     switch (body.action) {
+      case 'upload': {
+        // Step 1 of the upload: create a PENDING file and return its uploadUrl.
+        // The browser then PUTs the bytes straight to that URL (valid 15 min).
+        const name = (body.name ?? '').trim();
+        if (!name)
+          return Response.json({ error: 'Name is required' }, { status: 400 });
+        const parent = body.path ?? '';
+        const fullPath = parent ? `${parent}/${name}` : name;
+        const res = await assembly.createFile({
+          fileType: 'file',
+          requestBody: { path: fullPath, channelId },
+        });
+        // uploadUrl is returned by the API but not in the SDK's typed shape.
+        const uploadUrl = (res as { uploadUrl?: string }).uploadUrl;
+        if (!uploadUrl)
+          return Response.json(
+            { error: 'No upload URL returned' },
+            { status: 500 },
+          );
+        return Response.json({ uploadUrl });
+      }
+
       case 'newFolder': {
         const name = (body.name ?? '').trim();
         if (!name)
