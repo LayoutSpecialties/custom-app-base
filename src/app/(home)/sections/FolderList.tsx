@@ -25,13 +25,19 @@ function FolderIcon() {
   );
 }
 
+// Rendered as an SVG so the color rides on the `fill` attribute, not an inline
+// `style` — the app's Content Security Policy blocks inline style attributes.
 function StatusDot({ color }: { color: string }) {
   return (
-    <span
-      className="w-2.5 h-2.5 rounded-full shrink-0"
-      style={{ backgroundColor: color }}
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      className="shrink-0"
       aria-hidden="true"
-    />
+    >
+      <circle cx="5" cy="5" r="5" fill={color} />
+    </svg>
   );
 }
 
@@ -103,12 +109,6 @@ export function FolderList({
       </div>
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
-
-      {isInternal && (
-        <pre className="mb-4 p-2 bg-gray-100 text-xs overflow-auto rounded border border-gray-200">
-          {JSON.stringify({ statuses, folders }, null, 2)}
-        </pre>
-      )}
 
       {folders.length === 0 ? (
         <Body size="base" className="text-gray-500">
