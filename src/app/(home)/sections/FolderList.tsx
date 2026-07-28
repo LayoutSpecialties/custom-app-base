@@ -285,7 +285,9 @@ export function FolderList({
             token,
             companyId,
             action: 'notifyUpload',
-            fileNames: uploads.map((u) => u.relPath),
+            fileNames: uploads.map((u) =>
+              [currentPath, u.relPath].filter(Boolean).join('/'),
+            ),
           }),
         }).catch(() => {});
       }
