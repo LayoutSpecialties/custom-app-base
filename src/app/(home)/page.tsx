@@ -51,6 +51,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
           statuses={view.statuses}
           isInternal={view.isInternal}
           channelId={view.channelId}
+          companyId={view.companyId}
           token={token}
         />
       </Container>

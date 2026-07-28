@@ -57,6 +57,7 @@ export function FolderList({
   statuses,
   isInternal,
   channelId,
+  companyId,
   token,
 }: {
   breadcrumb: Crumb[];
@@ -64,6 +65,7 @@ export function FolderList({
   statuses: StatusDef[];
   isInternal: boolean;
   channelId?: string;
+  companyId?: string;
   token?: string;
 }) {
   const router = useRouter();
@@ -85,6 +87,14 @@ export function FolderList({
     params.set('fileId', fileId);
     if (token) params.set('token', token);
     return `/api/download?${params.toString()}`;
+  }
+
+  function folderZipHref(path: string) {
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    if (token) params.set('token', token);
+    if (companyId) params.set('companyId', companyId);
+    return `/api/download-folder?${params.toString()}`;
   }
 
   async function changeStatus(folderId: string, statusId: string) {
@@ -167,27 +177,39 @@ export function FolderList({
                   </span>
                 )}
 
-                {item.object === 'folder' &&
-                  (isInternal ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusDot color={status?.color ?? UNSET_COLOR} />
-                      <select
-                        className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
-                        value={item.statusId ?? ''}
-                        disabled={pendingId === item.id}
-                        onChange={(e) => changeStatus(item.id, e.target.value)}
-                      >
-                        <option value="">No status</option>
-                        {statuses.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <StatusBadge status={status} />
-                  ))}
+                {item.object === 'folder' && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={folderZipHref(item.path)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Download this folder as a .zip"
+                      className="text-sm px-2 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      Download
+                    </a>
+                    {isInternal ? (
+                      <>
+                        <StatusDot color={status?.color ?? UNSET_COLOR} />
+                        <select
+                          className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
+                          value={item.statusId ?? ''}
+                          disabled={pendingId === item.id}
+                          onChange={(e) => changeStatus(item.id, e.target.value)}
+                        >
+                          <option value="">No status</option>
+                          {statuses.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    ) : (
+                      <StatusBadge status={status} />
+                    )}
+                  </div>
+                )}
 
                 {item.object === 'file' && (
                   <a
