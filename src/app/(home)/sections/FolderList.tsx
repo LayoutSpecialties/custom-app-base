@@ -84,7 +84,7 @@ const menuItemClass =
 type HistoryEntry = {
   statusLabel: string;
   statusColor: string | null;
-  changedByName: string;
+  changedByName: string | null;
   changedAt: string;
 };
 
@@ -494,7 +494,7 @@ export function FolderList({
                       Open link
                     </a>
                   )}
-                  {item.object === 'folder' && isInternal && (
+                  {item.object === 'folder' && (
                     <button
                       type="button"
                       className={menuItemClass}
@@ -563,7 +563,7 @@ export function FolderList({
                     <div className="min-w-0">
                       <div className="text-sm text-gray-900">{e.statusLabel}</div>
                       <div className="text-xs text-gray-500">
-                        {e.changedByName} &middot;{' '}
+                        {e.changedByName ? `${e.changedByName} · ` : ''}
                         {new Date(e.changedAt).toLocaleString()}
                       </div>
                     </div>
