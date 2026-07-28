@@ -20,7 +20,14 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     <>
       <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
       <Container className="max-w-screen-lg">
-        <FolderList companyName={view.companyName} folders={view.folders} />
+        <FolderList
+          companyName={view.companyName}
+          folders={view.folders}
+          statuses={view.statuses}
+          isInternal={view.isInternal}
+          channelId={view.channelId}
+          token={token}
+        />
       </Container>
     </>
   );
