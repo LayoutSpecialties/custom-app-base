@@ -88,6 +88,54 @@ type HistoryEntry = {
   changedAt: string;
 };
 
+type Upload = { file: File; relPath: string };
+
+// Read every entry from a directory reader (it returns them in batches).
+function readAllEntries(
+  reader: FileSystemDirectoryReader,
+): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    const all: FileSystemEntry[] = [];
+    const read = () =>
+      reader.readEntries((batch) => {
+        if (batch.length === 0) resolve(all);
+        else {
+          all.push(...batch);
+          read();
+        }
+      }, reject);
+    read();
+  });
+}
+
+// Expand a drop into files with their relative paths, walking into folders.
+async function uploadsFromDataTransfer(dt: DataTransfer): Promise<Upload[]> {
+  const roots: FileSystemEntry[] = [];
+  for (let i = 0; i < dt.items.length; i++) {
+    const entry = dt.items[i].webkitGetAsEntry?.();
+    if (entry) roots.push(entry);
+  }
+  if (roots.length === 0) {
+    return Array.from(dt.files).map((file) => ({ file, relPath: file.name }));
+  }
+  const out: Upload[] = [];
+  async function walk(entry: FileSystemEntry, prefix: string): Promise<void> {
+    if (entry.isFile) {
+      const file = await new Promise<File>((res, rej) =>
+        (entry as FileSystemFileEntry).file(res, rej),
+      );
+      out.push({ file, relPath: prefix + entry.name });
+    } else if (entry.isDirectory) {
+      const children = await readAllEntries(
+        (entry as FileSystemDirectoryEntry).createReader(),
+      );
+      for (const c of children) await walk(c, `${prefix}${entry.name}/`);
+    }
+  }
+  for (const r of roots) await walk(r, '');
+  return out;
+}
+
 export function FolderList({
   breadcrumb,
   items,
@@ -122,6 +170,7 @@ export function FolderList({
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   function navigate(path: string) {
@@ -166,14 +215,47 @@ export function FolderList({
     }
   }
 
-  async function uploadFiles(files: FileList) {
-    const list = Array.from(files);
-    if (list.length === 0) return;
+  async function uploadEntries(uploads: Upload[]) {
+    if (uploads.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      for (const file of list) {
-        // 1) create the pending file, get its upload URL
+      // 1) create any subfolders these files need (shallowest first)
+      const folderSet = new Set<string>();
+      for (const { relPath } of uploads) {
+        const parts = relPath.split('/');
+        parts.pop(); // filename
+        let rel = '';
+        for (const p of parts) {
+          rel = rel ? `${rel}/${p}` : p;
+          folderSet.add([currentPath, rel].filter(Boolean).join('/'));
+        }
+      }
+      const folderPaths = Array.from(folderSet).sort(
+        (a, b) => a.split('/').length - b.split('/').length,
+      );
+      if (folderPaths.length > 0) {
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            companyId,
+            action: 'ensureFolders',
+            paths: folderPaths,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || 'Failed to create folders');
+        }
+      }
+
+      // 2) create each pending file and PUT its bytes to storage
+      for (const { file, relPath } of uploads) {
+        const parts = relPath.split('/');
+        const name = parts.pop() as string;
+        const parentPath = [currentPath, ...parts].filter(Boolean).join('/');
         const res = await fetch('/api/files', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -181,8 +263,8 @@ export function FolderList({
             token,
             companyId,
             action: 'upload',
-            path: currentPath,
-            name: file.name,
+            path: parentPath,
+            name,
           }),
         });
         if (!res.ok) {
@@ -190,10 +272,9 @@ export function FolderList({
           throw new Error(j.error || `Upload failed (${res.status})`);
         }
         const { uploadUrl } = await res.json();
-        // 2) PUT the bytes straight to storage
         const put = await fetch(uploadUrl, { method: 'PUT', body: file });
         if (!put.ok)
-          throw new Error(`Upload of "${file.name}" failed (${put.status})`);
+          throw new Error(`Upload of "${name}" failed (${put.status})`);
       }
       router.refresh();
     } catch (e) {
@@ -203,10 +284,27 @@ export function FolderList({
     }
   }
 
+  function uploadFileList(files: FileList) {
+    // Folder picker gives webkitRelativePath (e.g. "MyFolder/sub/a.txt");
+    // plain file picker leaves it empty, so fall back to the file name.
+    uploadEntries(
+      Array.from(files).map((file) => ({
+        file,
+        relPath:
+          (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+          file.name,
+      })),
+    );
+  }
+
+  async function uploadDataTransfer(dt: DataTransfer) {
+    uploadEntries(await uploadsFromDataTransfer(dt));
+  }
+
   // Capture drag-and-drop at the window level so a file dropped anywhere on the
   // page uploads to the current folder (instead of the browser opening it).
-  const uploadRef = useRef(uploadFiles);
-  uploadRef.current = uploadFiles;
+  const uploadRef = useRef(uploadDataTransfer);
+  uploadRef.current = uploadDataTransfer;
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
       if (e.dataTransfer?.types?.includes('Files')) {
@@ -220,7 +318,12 @@ export function FolderList({
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
       setDragOver(false);
-      if (e.dataTransfer?.files?.length) uploadRef.current(e.dataTransfer.files);
+      if (
+        e.dataTransfer &&
+        (e.dataTransfer.items?.length || e.dataTransfer.files?.length)
+      ) {
+        uploadRef.current(e.dataTransfer);
+      }
     };
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('dragleave', onDragLeave);
@@ -321,10 +424,32 @@ export function FolderList({
             multiple
             hidden
             onChange={(e) => {
-              if (e.target.files) uploadFiles(e.target.files);
+              if (e.target.files) uploadFileList(e.target.files);
               e.target.value = '';
             }}
           />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) uploadFileList(e.target.files);
+              e.target.value = '';
+            }}
+            {...({ webkitdirectory: '', directory: '' } as Record<
+              string,
+              string
+            >)}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => folderInputRef.current?.click()}
+            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Upload folder
+          </button>
           <button
             type="button"
             disabled={busy}

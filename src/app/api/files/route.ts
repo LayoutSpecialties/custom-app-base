@@ -13,9 +13,10 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     token?: string;
     companyId?: string;
-    action?: 'upload' | 'newFolder' | 'delete';
+    action?: 'upload' | 'newFolder' | 'ensureFolders' | 'delete';
     path?: string; // parent folder path (newFolder/upload) or item path (delete)
     name?: string; // new folder/file name
+    paths?: string[]; // folder paths to ensure (for ensureFolders)
     fileId?: string; // item id (for delete)
     object?: 'folder' | 'file' | 'link';
   };
@@ -56,6 +57,23 @@ export async function POST(request: Request) {
             { status: 500 },
           );
         return Response.json({ uploadUrl });
+      }
+
+      case 'ensureFolders': {
+        // Create each folder in order (shallowest first). Ignore per-folder
+        // errors so already-existing folders don't abort a folder upload.
+        for (const p of body.paths ?? []) {
+          if (!p) continue;
+          try {
+            await assembly.createFile({
+              fileType: 'folder',
+              requestBody: { path: p, channelId },
+            });
+          } catch {
+            /* folder likely already exists */
+          }
+        }
+        return Response.json({ ok: true });
       }
 
       case 'newFolder': {
