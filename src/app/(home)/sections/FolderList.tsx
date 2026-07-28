@@ -171,6 +171,8 @@ export function FolderList({
   const [historyLoading, setHistoryLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const pendingNotifyRef = useRef<string[]>([]);
+  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   function navigate(path: string) {
@@ -213,6 +215,31 @@ export function FolderList({
     } finally {
       setBusy(false);
     }
+  }
+
+  // Client uploads are batched: after the last upload we wait 60s (each new
+  // upload resets the wait) then send ONE grouped email. Tab close flushes now.
+  function flushNotifications() {
+    if (notifyTimerRef.current) {
+      clearTimeout(notifyTimerRef.current);
+      notifyTimerRef.current = null;
+    }
+    const fileNames = pendingNotifyRef.current;
+    if (fileNames.length === 0) return;
+    pendingNotifyRef.current = [];
+    fetch('/api/files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, companyId, action: 'notifyUpload', fileNames }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function queueNotification(paths: string[]) {
+    if (paths.length === 0) return;
+    pendingNotifyRef.current.push(...paths);
+    if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
+    notifyTimerRef.current = setTimeout(flushNotifications, 60000);
   }
 
   async function uploadEntries(uploads: Upload[]) {
@@ -276,20 +303,13 @@ export function FolderList({
         if (!put.ok)
           throw new Error(`Upload of "${name}" failed (${put.status})`);
       }
-      // Notify the internal team when a client uploads (fire-and-forget).
+      // Notify the internal team when a client uploads (batched; see queue).
       if (!isInternal) {
-        fetch('/api/files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token,
-            companyId,
-            action: 'notifyUpload',
-            fileNames: uploads.map((u) =>
-              [currentPath, u.relPath].filter(Boolean).join('/'),
-            ),
-          }),
-        }).catch(() => {});
+        queueNotification(
+          uploads.map((u) =>
+            [currentPath, u.relPath].filter(Boolean).join('/'),
+          ),
+        );
       }
       router.refresh();
     } catch (e) {
@@ -349,6 +369,31 @@ export function FolderList({
       window.removeEventListener('drop', onDrop);
     };
   }, []);
+
+  // Flush any pending upload notification if the tab is closing, so a batch
+  // isn't lost before its 60s timer fires.
+  useEffect(() => {
+    const flushOnHide = () => {
+      const fileNames = pendingNotifyRef.current;
+      if (fileNames.length === 0) return;
+      pendingNotifyRef.current = [];
+      const body = JSON.stringify({
+        token,
+        companyId,
+        action: 'notifyUpload',
+        fileNames,
+      });
+      navigator.sendBeacon?.(
+        '/api/files',
+        new Blob([body], { type: 'application/json' }),
+      );
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    return () => {
+      window.removeEventListener('pagehide', flushOnHide);
+      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
+    };
+  }, [token, companyId]);
 
   async function openHistory(item: FileItem) {
     if (!channelId) return;
