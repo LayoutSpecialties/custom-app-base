@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Body } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
@@ -193,6 +193,35 @@ export function FolderList({
     }
   }
 
+  // Capture drag-and-drop at the window level so a file dropped anywhere on the
+  // page uploads to the current folder (instead of the browser opening it).
+  const uploadRef = useRef(uploadFiles);
+  uploadRef.current = uploadFiles;
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault();
+        setDragOver(true);
+      }
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!e.relatedTarget) setDragOver(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      if (e.dataTransfer?.files?.length) uploadRef.current(e.dataTransfer.files);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   async function changeStatus(folderId: string, statusId: string) {
     if (!channelId) return;
     setPendingId(folderId);
@@ -217,19 +246,6 @@ export function FolderList({
 
   return (
     <section
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!dragOver) setDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
-      }}
       className={
         dragOver ? 'rounded-lg outline outline-2 outline-blue-400' : ''
       }

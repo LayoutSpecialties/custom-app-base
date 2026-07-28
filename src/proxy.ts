@@ -14,6 +14,7 @@ export function proxy(request: NextRequest) {
     style-src 'self' 'nonce-${nonce}';
     img-src 'self' blob: data:;
     font-src 'self';
+    connect-src 'self' https://*.amazonaws.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';
