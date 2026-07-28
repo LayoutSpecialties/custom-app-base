@@ -104,6 +104,12 @@ export function FolderList({
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
 
+      {isInternal && (
+        <pre className="mb-4 p-2 bg-gray-100 text-xs overflow-auto rounded border border-gray-200">
+          {JSON.stringify({ statuses, folders }, null, 2)}
+        </pre>
+      )}
+
       {folders.length === 0 ? (
         <Body size="base" className="text-gray-500">
           No folders yet.
