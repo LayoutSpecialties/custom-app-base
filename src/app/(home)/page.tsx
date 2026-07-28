@@ -5,6 +5,7 @@ import { GettingStarted } from './sections/GettingStarted';
 import { MissingApiKey } from './sections/MissingApiKey';
 import { BridgeConfigProvider } from './sections/BridgeConfigProvider';
 import { FolderList } from './sections/FolderList';
+import { ManageStatuses } from './sections/ManageStatuses';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,9 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     <>
       <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
       <Container className="max-w-screen-lg">
+        {view.isInternal && (
+          <ManageStatuses statuses={view.statuses} token={token} />
+        )}
         <FolderList
           companyName={view.companyName}
           folders={view.folders}

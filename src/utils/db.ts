@@ -104,3 +104,55 @@ export async function setFolderStatus(
                           updated_by = EXCLUDED.updated_by,
                           updated_at = now()`;
 }
+
+// ── Status category management (internal only; callers enforce the role) ──────
+
+export async function createStatus(label: string, color: string): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+
+  // Derive a unique id from the label.
+  const base = toStatusId(label);
+  const existing = (await sql`SELECT id FROM statuses WHERE id = ${base} OR id LIKE ${base + '_%'}`) as {
+    id: string;
+  }[];
+  const taken = new Set(existing.map((r) => r.id));
+  let id = base;
+  let n = 2;
+  while (taken.has(id)) id = `${base}_${n++}`;
+
+  const maxRow = (await sql`SELECT COALESCE(MAX(sort_order), -1) AS m FROM statuses`) as {
+    m: number;
+  }[];
+  const sortOrder = (maxRow[0]?.m ?? -1) + 1;
+
+  await sql`INSERT INTO statuses (id, label, color, sort_order)
+            VALUES (${id}, ${label}, ${color}, ${sortOrder})`;
+}
+
+export async function updateStatus(
+  id: string,
+  label: string,
+  color: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  // id stays stable so existing folder assignments remain valid.
+  await sql`UPDATE statuses SET label = ${label}, color = ${color} WHERE id = ${id}`;
+}
+
+export async function deleteStatus(id: string): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  // Any folders using this status fall back to "No status".
+  await sql`UPDATE folder_status SET status_id = NULL WHERE status_id = ${id}`;
+  await sql`DELETE FROM statuses WHERE id = ${id}`;
+}
+
+export async function setStatusOrder(orderedIds: string[]): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  for (let i = 0; i < orderedIds.length; i++) {
+    await sql`UPDATE statuses SET sort_order = ${i} WHERE id = ${orderedIds[i]}`;
+  }
+}
