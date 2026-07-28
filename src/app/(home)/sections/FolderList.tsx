@@ -276,6 +276,19 @@ export function FolderList({
         if (!put.ok)
           throw new Error(`Upload of "${name}" failed (${put.status})`);
       }
+      // Notify the internal team when a client uploads (fire-and-forget).
+      if (!isInternal) {
+        fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            companyId,
+            action: 'notifyUpload',
+            fileNames: uploads.map((u) => u.relPath),
+          }),
+        }).catch(() => {});
+      }
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');

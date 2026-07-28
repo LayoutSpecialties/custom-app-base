@@ -1,5 +1,6 @@
 import { assemblyApi } from '@assembly-js/node-sdk';
 import { need } from '@/utils/need';
+import { sendUploadNotification } from '@/utils/email';
 
 // File-management actions. Upload/New Folder/Delete are available to both
 // clients and internal users (per project decision). Everyone is scoped to a
@@ -13,10 +14,16 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     token?: string;
     companyId?: string;
-    action?: 'upload' | 'newFolder' | 'ensureFolders' | 'delete';
+    action?:
+      | 'upload'
+      | 'newFolder'
+      | 'ensureFolders'
+      | 'delete'
+      | 'notifyUpload';
     path?: string; // parent folder path (newFolder/upload) or item path (delete)
     name?: string; // new folder/file name
     paths?: string[]; // folder paths to ensure (for ensureFolders)
+    fileNames?: string[]; // uploaded file names (for notifyUpload)
     fileId?: string; // item id (for delete)
     object?: 'folder' | 'file' | 'link';
   };
@@ -73,6 +80,26 @@ export async function POST(request: Request) {
             /* folder likely already exists */
           }
         }
+        return Response.json({ ok: true });
+      }
+
+      case 'notifyUpload': {
+        // Email the internal team when a CLIENT uploads. Internal uploads are
+        // not notified. Never fails the request if email is unconfigured.
+        if (payload?.internalUserId) return Response.json({ ok: true });
+        let companyName: string | undefined;
+        try {
+          if (payload?.companyId) {
+            const c = await assembly.retrieveCompany({ id: payload.companyId });
+            companyName = c.name;
+          }
+        } catch {
+          /* ignore */
+        }
+        const fileNames = Array.isArray(body.fileNames)
+          ? body.fileNames.slice(0, 50).map(String)
+          : [];
+        await sendUploadNotification({ companyName, fileNames });
         return Response.json({ ok: true });
       }
 
