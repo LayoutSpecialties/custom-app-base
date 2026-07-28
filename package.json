@@ -13,6 +13,7 @@
     "@assembly-js/app-bridge": "^1.1.0",
     "@assembly-js/design-system": "^3.0.1",
     "@assembly-js/node-sdk": "^3.19.1",
+    "@fontsource/inter": "^5.3.0",
     "@neondatabase/serverless": "^1.1.0",
     "archiver": "7",
     "next": "^16.1.0",

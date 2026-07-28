@@ -499,6 +499,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/inter@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/inter@npm:5.3.0"
+  checksum: 10c0/568601c10c83601c23005f8cd7434499df6e007eaa22c4dabbb1dcae327cc8e4a148ece8d4a4edaa8bafc5d2371ea97a37d1cc91ffbed77a43e2d8c15a6e831b
+  languageName: node
+  linkType: hard
+
 "@humanfs/core@npm:^0.19.1":
   version: 0.19.1
   resolution: "@humanfs/core@npm:0.19.1"
@@ -2758,6 +2765,7 @@ __metadata:
     "@assembly-js/app-bridge": "npm:^1.1.0"
     "@assembly-js/design-system": "npm:^3.0.1"
     "@assembly-js/node-sdk": "npm:^3.19.1"
+    "@fontsource/inter": "npm:^5.3.0"
     "@neondatabase/serverless": "npm:^1.1.0"
     "@ngrok/ngrok": "npm:^1.4.1"
     "@types/archiver": "npm:6"
