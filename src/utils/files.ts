@@ -9,25 +9,35 @@ export interface FolderItem {
   statusId: string | null;
 }
 
+export interface CompanyOption {
+  id: string;
+  name: string;
+}
+
 export interface FolderView {
-  companyName?: string;
-  channelId?: string;
   isInternal: boolean;
+  companyId?: string;
+  companyName?: string;
+  companies?: CompanyOption[]; // internal picker options (undefined for clients)
+  channelId?: string;
   statuses: StatusDef[];
   folders: FolderItem[];
 }
 
+// Internal users may view any company; we cap the picker list for now.
+const COMPANY_LIMIT = 100;
+
 /**
- * Resolves the top-level folders a viewer should see, each with its assigned
- * status, plus the list of available statuses.
+ * Resolves the folder view for the current viewer.
  *
- * - Client (token carries companyId): that company's file channel.
- * - Internal user (no companyId in token): falls back to the first company in
- *   the workspace, so we can see real data while testing from the dashboard.
- *   A company picker for internal users comes in a later increment.
+ * - Client: hard-scoped to the company in their token. `selectedCompanyId` is
+ *   ignored, so a client can never view another company's files.
+ * - Internal user: lists companies and views `selectedCompanyId` if it's a real
+ *   company, otherwise the first one.
  */
 export async function getFolderView(
   token: string | undefined,
+  selectedCompanyId?: string,
 ): Promise<FolderView> {
   const apiKey = need<string>(
     process.env.ASSEMBLY_API_KEY,
@@ -39,17 +49,27 @@ export async function getFolderView(
 
   const statuses = await listStatuses();
 
-  let companyId = payload?.companyId;
+  let companyId: string | undefined;
   let companyName: string | undefined;
+  let companies: CompanyOption[] | undefined;
 
-  if (!companyId) {
-    const companies = await assembly.listCompanies({ limit: 1 });
-    const first = companies.data?.[0];
-    companyId = first?.id;
-    companyName = first?.name;
+  if (isInternal) {
+    const list = await assembly.listCompanies({ limit: COMPANY_LIMIT });
+    companies = (list.data ?? [])
+      .map((c) => ({ id: c.id ?? '', name: c.name ?? 'Unnamed company' }))
+      .filter((c) => c.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    companyId =
+      selectedCompanyId && companies.some((c) => c.id === selectedCompanyId)
+        ? selectedCompanyId
+        : companies[0]?.id;
+    companyName = companies.find((c) => c.id === companyId)?.name;
+  } else {
+    // Client: locked to their own company.
+    companyId = payload?.companyId;
   }
 
-  if (!companyId) return { isInternal, statuses, folders: [] };
+  if (!companyId) return { isInternal, companies, statuses, folders: [] };
 
   if (!companyName) {
     const company = await assembly.retrieveCompany({ id: companyId });
@@ -62,7 +82,8 @@ export async function getFolderView(
     companyId,
   });
   const channelId = channels.data?.[0]?.id;
-  if (!channelId) return { companyName, isInternal, statuses, folders: [] };
+  if (!channelId)
+    return { isInternal, companyId, companyName, companies, statuses, folders: [] };
 
   // listFiles returns a flat, recursive list; keep only top-level folders
   // (folders whose path has no '/' separator).
@@ -81,5 +102,13 @@ export async function getFolderView(
     statusId: statusMap[f.id] ?? null,
   }));
 
-  return { companyName, channelId, isInternal, statuses, folders };
+  return {
+    isInternal,
+    companyId,
+    companyName,
+    companies,
+    channelId,
+    statuses,
+    folders,
+  };
 }

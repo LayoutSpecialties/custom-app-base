@@ -7,6 +7,7 @@ import { BridgeConfigProvider } from './sections/BridgeConfigProvider';
 import { FolderList } from './sections/FolderList';
 import { ManageStatuses } from './sections/ManageStatuses';
 import { AutoRefresh } from './sections/AutoRefresh';
+import { CompanyPicker } from './sections/CompanyPicker';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,14 +16,24 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     'token' in searchParams && typeof searchParams.token === 'string'
       ? searchParams.token
       : undefined;
+  const selectedCompanyId =
+    'companyId' in searchParams && typeof searchParams.companyId === 'string'
+      ? searchParams.companyId
+      : undefined;
   const session = await getSession(searchParams);
-  const view = await getFolderView(token);
+  const view = await getFolderView(token, selectedCompanyId);
 
   return (
     <>
       <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
       <AutoRefresh />
       <Container className="max-w-screen-lg">
+        {view.isInternal && view.companies && (
+          <CompanyPicker
+            companies={view.companies}
+            companyId={view.companyId}
+          />
+        )}
         {view.isInternal && (
           <ManageStatuses statuses={view.statuses} token={token} />
         )}
