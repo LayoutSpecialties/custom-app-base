@@ -20,8 +20,12 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     'companyId' in searchParams && typeof searchParams.companyId === 'string'
       ? searchParams.companyId
       : undefined;
+  const currentPath =
+    'path' in searchParams && typeof searchParams.path === 'string'
+      ? searchParams.path
+      : '';
   const session = await getSession(searchParams);
-  const view = await getFolderView(token, selectedCompanyId);
+  const view = await getFolderView(token, selectedCompanyId, currentPath);
 
   return (
     <>
@@ -42,8 +46,8 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
           </div>
         )}
         <FolderList
-          companyName={view.companyName}
-          folders={view.folders}
+          breadcrumb={view.breadcrumb}
+          items={view.items}
           statuses={view.statuses}
           isInternal={view.isInternal}
           channelId={view.channelId}
