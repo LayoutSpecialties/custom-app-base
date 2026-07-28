@@ -21,6 +21,7 @@ export function CompanyPicker({
   function select(id: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('companyId', id);
+    params.delete('path'); // reset to the new company's root
     router.push(`${pathname}?${params.toString()}`);
   }
 
