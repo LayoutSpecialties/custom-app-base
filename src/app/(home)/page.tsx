@@ -6,6 +6,7 @@ import { MissingApiKey } from './sections/MissingApiKey';
 import { BridgeConfigProvider } from './sections/BridgeConfigProvider';
 import { FolderList } from './sections/FolderList';
 import { ManageStatuses } from './sections/ManageStatuses';
+import { AutoRefresh } from './sections/AutoRefresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
       <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
+      <AutoRefresh />
       <Container className="max-w-screen-lg">
         {view.isInternal && (
           <ManageStatuses statuses={view.statuses} token={token} />
