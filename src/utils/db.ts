@@ -40,6 +40,18 @@ async function ready() {
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (channel_id, folder_id)
     )`;
+    await sql`CREATE TABLE IF NOT EXISTS status_history (
+      id bigserial PRIMARY KEY,
+      channel_id   text NOT NULL,
+      folder_id    text NOT NULL,
+      status_id    text,
+      status_label text,
+      status_color text,
+      changed_by   text,
+      changed_at   timestamptz NOT NULL DEFAULT now()
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS status_history_folder_idx
+              ON status_history (channel_id, folder_id, changed_at DESC)`;
     const existing = (await sql`SELECT count(*)::int AS n FROM statuses`) as {
       n: number;
     }[];
@@ -103,6 +115,54 @@ export async function setFolderStatus(
             DO UPDATE SET status_id = EXCLUDED.status_id,
                           updated_by = EXCLUDED.updated_by,
                           updated_at = now()`;
+
+  // Snapshot the change into history (label/color captured now so the audit
+  // trail stays accurate even if the status is later renamed or deleted).
+  let label = 'No status';
+  let color: string | null = null;
+  if (statusId) {
+    const s = (await sql`SELECT label, color FROM statuses WHERE id = ${statusId}`) as {
+      label: string;
+      color: string;
+    }[];
+    if (s[0]) {
+      label = s[0].label;
+      color = s[0].color;
+    }
+  }
+  await sql`INSERT INTO status_history
+              (channel_id, folder_id, status_id, status_label, status_color, changed_by)
+            VALUES (${channelId}, ${folderId}, ${statusId}, ${label}, ${color}, ${updatedBy ?? null})`;
+}
+
+export interface HistoryRow {
+  statusLabel: string;
+  statusColor: string | null;
+  changedBy: string | null;
+  changedAt: string;
+}
+
+export async function getFolderHistory(
+  channelId: string,
+  folderId: string,
+): Promise<HistoryRow[]> {
+  const sql = await ready();
+  if (!sql) return [];
+  const rows = (await sql`SELECT status_label, status_color, changed_by, changed_at
+                          FROM status_history
+                          WHERE channel_id = ${channelId} AND folder_id = ${folderId}
+                          ORDER BY changed_at DESC LIMIT 200`) as {
+    status_label: string | null;
+    status_color: string | null;
+    changed_by: string | null;
+    changed_at: string;
+  }[];
+  return rows.map((r) => ({
+    statusLabel: r.status_label ?? 'No status',
+    statusColor: r.status_color,
+    changedBy: r.changed_by,
+    changedAt: r.changed_at,
+  }));
 }
 
 // ── Status category management (internal only; callers enforce the role) ──────

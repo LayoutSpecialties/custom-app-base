@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Body } from '@assembly-js/design-system';
+import { Body, Heading } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
 import type { StatusDef } from '@/utils/status';
 import { UNSET_COLOR } from '@/utils/status';
@@ -81,6 +81,13 @@ function ItemMenu({
 const menuItemClass =
   'block w-full text-left px-3 py-2 hover:bg-gray-50 text-gray-700';
 
+type HistoryEntry = {
+  statusLabel: string;
+  statusColor: string | null;
+  changedByName: string;
+  changedAt: string;
+};
+
 export function FolderList({
   breadcrumb,
   items,
@@ -111,6 +118,9 @@ export function FolderList({
   const [confirmDelete, setConfirmDelete] = useState<FileItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [historyItem, setHistoryItem] = useState<FileItem | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
@@ -221,6 +231,28 @@ export function FolderList({
       window.removeEventListener('drop', onDrop);
     };
   }, []);
+
+  async function openHistory(item: FileItem) {
+    if (!channelId) return;
+    setHistoryItem(item);
+    setHistoryEntries(null);
+    setHistoryLoading(true);
+    try {
+      const res = await fetch('/api/folder-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, channelId, folderId: item.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Failed to load history');
+      setHistoryEntries(j.entries ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load history');
+      setHistoryItem(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
 
   async function changeStatus(folderId: string, statusId: string) {
     if (!channelId) return;
@@ -462,6 +494,18 @@ export function FolderList({
                       Open link
                     </a>
                   )}
+                  {item.object === 'folder' && isInternal && (
+                    <button
+                      type="button"
+                      className={menuItemClass}
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        openHistory(item);
+                      }}
+                    >
+                      Status history
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`${menuItemClass} text-red-600`}
@@ -477,6 +521,58 @@ export function FolderList({
             );
           })}
         </ul>
+      )}
+
+      {historyItem && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setHistoryItem(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-auto p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <Heading size="lg">Status history</Heading>
+              <button
+                type="button"
+                onClick={() => setHistoryItem(null)}
+                className="text-gray-500 hover:bg-gray-100 rounded px-2 leading-none"
+              >
+                &#10005;
+              </button>
+            </div>
+            <Body size="sm" className="text-gray-500 mb-4 truncate">
+              {historyItem.name}
+            </Body>
+            {historyLoading ? (
+              <Body size="sm" className="text-gray-500">
+                Loading…
+              </Body>
+            ) : !historyEntries || historyEntries.length === 0 ? (
+              <Body size="sm" className="text-gray-500">
+                No status changes yet.
+              </Body>
+            ) : (
+              <ul className="space-y-3">
+                {historyEntries.map((e, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-1">
+                      <StatusDot color={e.statusColor ?? UNSET_COLOR} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm text-gray-900">{e.statusLabel}</div>
+                      <div className="text-xs text-gray-500">
+                        {e.changedByName} &middot;{' '}
+                        {new Date(e.changedAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
     </section>
   );
