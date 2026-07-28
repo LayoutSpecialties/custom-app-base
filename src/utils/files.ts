@@ -73,9 +73,14 @@ export async function getFolderView(
       .map((c) => ({ id: c.id ?? '', name: c.name ?? 'Unnamed company' }))
       .filter((c) => c.id)
       .sort((a, b) => a.name.localeCompare(b.name));
-    companyId =
-      selectedCompanyId && companies.some((c) => c.id === selectedCompanyId)
-        ? selectedCompanyId
+    // Prefer an explicit dropdown choice (?companyId=), then the company the
+    // app was opened from if Assembly passes one in the token, then the first.
+    const known = (id: string | undefined | null): id is string =>
+      !!id && companies!.some((c) => c.id === id);
+    companyId = known(selectedCompanyId)
+      ? selectedCompanyId
+      : known(payload?.companyId)
+        ? payload?.companyId
         : companies[0]?.id;
     companyName = companies.find((c) => c.id === companyId)?.name;
   } else {
