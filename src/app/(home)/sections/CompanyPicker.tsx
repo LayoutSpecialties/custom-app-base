@@ -27,7 +27,7 @@ export function CompanyPicker({
   if (companies.length === 0) return null;
 
   return (
-    <div className="mb-6 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <Body size="sm" className="text-gray-500">
         Viewing
       </Body>

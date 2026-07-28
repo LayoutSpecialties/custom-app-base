@@ -28,14 +28,18 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
       <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
       <AutoRefresh />
       <Container className="max-w-screen-lg">
-        {view.isInternal && view.companies && (
-          <CompanyPicker
-            companies={view.companies}
-            companyId={view.companyId}
-          />
-        )}
         {view.isInternal && (
-          <ManageStatuses statuses={view.statuses} token={token} />
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex-1 min-w-0">
+              {view.companies && view.companies.length > 0 && (
+                <CompanyPicker
+                  companies={view.companies}
+                  companyId={view.companyId}
+                />
+              )}
+            </div>
+            <ManageStatuses statuses={view.statuses} token={token} />
+          </div>
         )}
         <FolderList
           companyName={view.companyName}

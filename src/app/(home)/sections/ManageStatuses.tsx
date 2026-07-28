@@ -52,64 +52,71 @@ export function ManageStatuses({
   }
 
   return (
-    <section className="mb-8 border border-gray-200 rounded-lg">
+    <div className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left"
+        className="text-sm border border-gray-300 rounded-md px-3 py-1 bg-white text-gray-700 hover:bg-gray-50"
       >
-        <Heading size="lg">Manage statuses</Heading>
-        <span className="text-gray-500 text-sm">{open ? 'Hide' : 'Edit'}</span>
+        Manage statuses
       </button>
 
       {open && (
-        <div className="px-4 pb-4">
-          <Body size="sm" className="text-gray-500 mb-3">
-            Rename, recolor, reorder, add, or remove the statuses your team can
-            assign to folders.
-          </Body>
-
-          {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
-
-          <div className="divide-y divide-gray-100">
-            {statuses.map((s, i) => (
-              <EditRow
-                key={s.id}
-                status={s}
-                busy={busy}
-                canMoveUp={i > 0}
-                canMoveDown={i < statuses.length - 1}
-                onSave={(label, color) =>
-                  run(() =>
-                    postStatus({
-                      token,
-                      action: 'update',
-                      id: s.id,
-                      label,
-                      color,
-                    }),
-                  )
-                }
-                onDelete={() =>
-                  run(() => postStatus({ token, action: 'delete', id: s.id }))
-                }
-                onMoveUp={() => move(s.id, 'up')}
-                onMoveDown={() => move(s.id, 'down')}
-              />
-            ))}
-          </div>
-
-          <AddRow
-            busy={busy}
-            onAdd={(label, color) =>
-              run(() =>
-                postStatus({ token, action: 'create', label, color }),
-              )
-            }
+        <>
+          <div
+            className="fixed inset-0 z-10"
+            aria-hidden="true"
+            onClick={() => setOpen(false)}
           />
-        </div>
+          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
+            <div className="mb-2">
+              <Heading size="lg">Manage statuses</Heading>
+              <Body size="sm" className="text-gray-500 mt-1">
+                Rename, recolor, reorder, add, or remove the statuses your team
+                can assign to folders.
+              </Body>
+            </div>
+
+            {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+
+            <div className="divide-y divide-gray-100">
+              {statuses.map((s, i) => (
+                <EditRow
+                  key={s.id}
+                  status={s}
+                  busy={busy}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < statuses.length - 1}
+                  onSave={(label, color) =>
+                    run(() =>
+                      postStatus({
+                        token,
+                        action: 'update',
+                        id: s.id,
+                        label,
+                        color,
+                      }),
+                    )
+                  }
+                  onDelete={() =>
+                    run(() => postStatus({ token, action: 'delete', id: s.id }))
+                  }
+                  onMoveUp={() => move(s.id, 'up')}
+                  onMoveDown={() => move(s.id, 'down')}
+                />
+              ))}
+            </div>
+
+            <AddRow
+              busy={busy}
+              onAdd={(label, color) =>
+                run(() => postStatus({ token, action: 'create', label, color }))
+              }
+            />
+          </div>
+        </>
       )}
-    </section>
+    </div>
   );
 }
 
