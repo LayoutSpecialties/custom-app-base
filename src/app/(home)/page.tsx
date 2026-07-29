@@ -1,6 +1,7 @@
 import { Container } from '@/components/Container';
 import { getSession } from '@/utils/session';
 import { getFolderView } from '@/utils/files';
+import { withRetry } from '@/utils/retry';
 import { GettingStarted } from './sections/GettingStarted';
 import { MissingApiKey } from './sections/MissingApiKey';
 import { BridgeConfigProvider } from './sections/BridgeConfigProvider';
@@ -24,8 +25,10 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     'path' in searchParams && typeof searchParams.path === 'string'
       ? searchParams.path
       : '';
-  const session = await getSession(searchParams);
-  const view = await getFolderView(token, selectedCompanyId, currentPath);
+  const session = await withRetry(() => getSession(searchParams));
+  const view = await withRetry(() =>
+    getFolderView(token, selectedCompanyId, currentPath),
+  );
 
   return (
     <>
