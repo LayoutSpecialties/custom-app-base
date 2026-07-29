@@ -1,14 +1,8 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 import { getFolderHistory } from '@/utils/db';
 
 // Returns a folder's status-change history. Internal users only.
 export async function POST(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const { token, channelId, folderId } = (await request.json()) as {
     token?: string;
     channelId?: string;
@@ -21,7 +15,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const assembly = await assemblyApi({ apiKey, token });
+  const assembly = await assemblyClient(token);
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 

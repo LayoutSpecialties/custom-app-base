@@ -1,5 +1,4 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 
 /**
  * A helper function that instantiates the Assembly SDK and fetches data
@@ -7,20 +6,11 @@ import { need } from '@/utils/need';
  * passed to your app in the searchParams.
  */
 export async function getSession(searchParams: SearchParams) {
-  // apiKey needs to be defined inside the function so we get the
-  // error boundary page instead of a vercel error.
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required, guide available at: https://docs.assembly.com/docs/custom-apps-setting-up-your-first-app#step-2-register-your-app-and-get-an-api-key',
-  );
-
-  const assembly = await assemblyApi({
-    apiKey: apiKey,
-    token:
-      'token' in searchParams && typeof searchParams.token === 'string'
-        ? searchParams.token
-        : undefined,
-  });
+  const token =
+    'token' in searchParams && typeof searchParams.token === 'string'
+      ? searchParams.token
+      : undefined;
+  const assembly = await assemblyClient(token);
 
   const data: {
     workspace: Awaited<ReturnType<typeof assembly.retrieveWorkspace>>;

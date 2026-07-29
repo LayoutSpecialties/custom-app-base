@@ -1,5 +1,4 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 import {
   createStatus,
   updateStatus,
@@ -12,11 +11,6 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 // Manage status categories. Internal users only — role is derived server-side
 // from the token, never trusted from the request body.
 export async function POST(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const body = (await request.json()) as {
     token?: string;
     action?: 'create' | 'update' | 'delete' | 'reorder';
@@ -26,7 +20,7 @@ export async function POST(request: Request) {
     orderedIds?: string[];
   };
 
-  const assembly = await assemblyApi({ apiKey, token: body.token });
+  const assembly = await assemblyClient(body.token);
   const payload = await assembly.getTokenPayload?.();
   if (!payload?.internalUserId) {
     return Response.json(

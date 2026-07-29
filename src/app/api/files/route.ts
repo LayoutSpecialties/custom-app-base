@@ -1,16 +1,10 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 import { sendUploadNotification } from '@/utils/email';
 
 // File-management actions. Upload/New Folder/Delete are available to both
 // clients and internal users (per project decision). Everyone is scoped to a
 // channel server-side: clients to their own company, internal to ?companyId=.
 export async function POST(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const body = (await request.json()) as {
     token?: string;
     companyId?: string;
@@ -28,7 +22,7 @@ export async function POST(request: Request) {
     object?: 'folder' | 'file' | 'link';
   };
 
-  const assembly = await assemblyApi({ apiKey, token: body.token });
+  const assembly = await assemblyClient(body.token);
   const payload = await assembly.getTokenPayload?.();
 
   const companyId = payload?.internalUserId ? body.companyId : payload?.companyId;

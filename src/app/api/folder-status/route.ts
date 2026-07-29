@@ -1,15 +1,9 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 import { setFolderStatus } from '@/utils/db';
 
 // Assign (or clear) a folder's status. Internal users only — the role is
 // derived server-side from the token, never trusted from the request body.
 export async function POST(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const { token, channelId, folderId, statusId } = (await request.json()) as {
     token?: string;
     channelId?: string;
@@ -24,7 +18,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const assembly = await assemblyApi({ apiKey, token });
+  const assembly = await assemblyClient(token);
   const payload = await assembly.getTokenPayload?.();
   if (!payload?.internalUserId) {
     return Response.json(

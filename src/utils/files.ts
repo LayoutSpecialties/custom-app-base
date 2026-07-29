@@ -1,5 +1,4 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 import { getFolderStatusMap, listStatuses } from '@/utils/db';
 import type { StatusDef } from '@/utils/status';
 
@@ -52,11 +51,7 @@ export async function getFolderView(
   selectedCompanyId?: string,
   currentPath: string = '',
 ): Promise<FolderView> {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-  const assembly = await assemblyApi({ apiKey, token });
+  const assembly = await assemblyClient(token);
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 

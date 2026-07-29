@@ -1,20 +1,14 @@
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 
 // Redirects to a short-lived download URL for a file. Clients are scoped to
 // their own company channel; internal users may download from any channel.
 export async function GET(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const url = new URL(request.url);
   const fileId = url.searchParams.get('fileId');
   const token = url.searchParams.get('token') ?? undefined;
   if (!fileId) return new Response('fileId is required', { status: 400 });
 
-  const assembly = await assemblyApi({ apiKey, token });
+  const assembly = await assemblyClient(token);
   const payload = await assembly.getTokenPayload?.();
 
   const file = await assembly.retrieveFile({ id: fileId });

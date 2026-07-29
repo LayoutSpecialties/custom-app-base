@@ -1,7 +1,6 @@
 import archiver from 'archiver';
 import { Readable } from 'stream';
-import { assemblyApi } from '@assembly-js/node-sdk';
-import { need } from '@/utils/need';
+import { assemblyClient } from '@/utils/assembly';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // seconds (Vercel free-plan cap)
@@ -10,17 +9,12 @@ export const maxDuration = 60; // seconds (Vercel free-plan cap)
 // folder structure. Clients are scoped to their own company channel; internal
 // users pass ?companyId= for the company they're viewing.
 export async function GET(request: Request) {
-  const apiKey = need<string>(
-    process.env.ASSEMBLY_API_KEY,
-    'ASSEMBLY_API_KEY is required',
-  );
-
   const url = new URL(request.url);
   const folderPath = url.searchParams.get('path') ?? '';
   const companyIdParam = url.searchParams.get('companyId') ?? undefined;
   const token = url.searchParams.get('token') ?? undefined;
 
-  const assembly = await assemblyApi({ apiKey, token });
+  const assembly = await assemblyClient(token);
   const payload = await assembly.getTokenPayload?.();
 
   const companyId = payload?.internalUserId ? companyIdParam : payload?.companyId;
