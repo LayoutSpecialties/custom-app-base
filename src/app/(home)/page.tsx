@@ -25,14 +25,16 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     'path' in searchParams && typeof searchParams.path === 'string'
       ? searchParams.path
       : '';
-  const session = await withRetry(() => getSession(searchParams));
+  // getSession is only used for the portal URL below; it hits a session-scoped
+  // endpoint that can 403 as the token ages, so never let it crash the page.
+  const session = await getSession(searchParams).catch(() => null);
   const view = await withRetry(() =>
     getFolderView(token, selectedCompanyId, currentPath),
   );
 
   return (
     <>
-      <BridgeConfigProvider portalUrl={session.workspace?.portalUrl} />
+      <BridgeConfigProvider portalUrl={session?.workspace?.portalUrl} />
       <AutoRefresh />
       <Container className="max-w-screen-lg">
         {view.isInternal && (
