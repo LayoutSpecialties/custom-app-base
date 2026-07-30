@@ -660,8 +660,7 @@ export function FolderList({
                   {item.object === 'file' && (
                     <a
                       href={downloadHref(item.id)}
-                      target="_blank"
-                      rel="noreferrer"
+                      download={item.name}
                       className={menuItemClass}
                       onClick={() => setOpenMenuId(null)}
                     >
