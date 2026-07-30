@@ -1,6 +1,7 @@
 import archiver from 'archiver';
 import { Readable } from 'stream';
 import { assemblyClient } from '@/utils/assembly';
+import { listAllFiles } from '@/utils/files';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // seconds (Vercel free-plan cap)
@@ -28,8 +29,8 @@ export async function GET(request: Request) {
   if (!channelId) return new Response('No files', { status: 404 });
 
   const prefix = folderPath ? `${folderPath}/` : '';
-  const listing = await assembly.listFiles({ channelId });
-  const fileEntries = (listing.data ?? []).filter(
+  const listing = await listAllFiles(assembly, channelId, folderPath || undefined);
+  const fileEntries = listing.filter(
     (f) =>
       f.object === 'file' &&
       typeof f.path === 'string' &&

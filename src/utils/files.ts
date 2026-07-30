@@ -36,6 +36,35 @@ export interface FolderView {
 // Internal users may view any company; we cap the picker list for now.
 const COMPANY_LIMIT = 100;
 
+type AssemblySdk = Awaited<ReturnType<typeof assemblyClient>>;
+
+export interface RawFile {
+  id?: string;
+  object?: string;
+  path?: string;
+  name?: string;
+  linkUrl?: string;
+}
+
+// Page through EVERY file in a channel (optionally under `path`). listFiles is
+// paginated; fetching a single page would miss files in large channels — which
+// broke recursive delete (folder "not empty") and could hide files in listings.
+export async function listAllFiles(
+  assembly: AssemblySdk,
+  channelId: string,
+  path?: string,
+): Promise<RawFile[]> {
+  const all: RawFile[] = [];
+  let nextToken: string | undefined;
+  let guard = 0;
+  do {
+    const res = await assembly.listFiles({ channelId, path, nextToken });
+    if (res.data) all.push(...(res.data as RawFile[]));
+    nextToken = (res as { nextToken?: string }).nextToken;
+  } while (nextToken && ++guard < 100);
+  return all;
+}
+
 /**
  * Resolves the contents of one folder for the current viewer.
  *
@@ -113,11 +142,11 @@ export async function getFolderView(
 
   // listFiles returns a flat, recursive list for the whole channel. Take the
   // direct children of currentPath (paths whose remainder has no '/').
-  const files = await assembly.listFiles({ channelId });
+  const files = await listAllFiles(assembly, channelId);
   const statusMap = await getFolderStatusMap(channelId);
   const prefix = currentPath ? `${currentPath}/` : '';
 
-  const items: FileItem[] = (files.data ?? [])
+  const items: FileItem[] = files
     .filter((f) => typeof f.path === 'string' && f.path.startsWith(prefix))
     .map((f) => ({ f, rel: (f.path as string).slice(prefix.length) }))
     .filter((x) => x.rel.length > 0 && !x.rel.includes('/'))

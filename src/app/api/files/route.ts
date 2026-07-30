@@ -1,4 +1,5 @@
 import { assemblyClient } from '@/utils/assembly';
+import { listAllFiles } from '@/utils/files';
 import { sendUploadNotification } from '@/utils/email';
 
 // File-management actions. Upload/New Folder/Delete are available to both
@@ -121,11 +122,10 @@ export async function POST(request: Request) {
 
         // Folders must be emptied first (delete is not recursive server-side).
         if (body.object === 'folder' && body.path) {
-          const listing = await assembly.listFiles({ channelId });
           const prefix = `${body.path}/`;
-          const descendants = (listing.data ?? []).filter(
-            (f) => typeof f.path === 'string' && f.path.startsWith(prefix),
-          );
+          const descendants = (
+            await listAllFiles(assembly, channelId, body.path)
+          ).filter((f) => typeof f.path === 'string' && f.path.startsWith(prefix));
           // Deepest paths first so children go before their parents.
           descendants.sort(
             (a, b) =>
