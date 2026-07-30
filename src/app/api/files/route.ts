@@ -82,6 +82,33 @@ export async function POST(request: Request) {
         // Email the internal team when a CLIENT uploads. Internal uploads are
         // not notified. Never fails the request if email is unconfigured.
         if (payload?.internalUserId) return Response.json({ ok: true });
+
+        // Also skip uploads by our own people (same email domain as the
+        // notification recipients, e.g. staff testing as a client). Domains
+        // come from NOTIFY_TO, plus an optional NOTIFY_SKIP_DOMAINS override.
+        if (payload?.clientId) {
+          try {
+            const client = await assembly.retrieveClient({
+              id: payload.clientId,
+            });
+            const domain = (client.email ?? '').toLowerCase().split('@')[1];
+            const skip = new Set(
+              [
+                ...(process.env.NOTIFY_TO ?? '').split(','),
+                ...(process.env.NOTIFY_SKIP_DOMAINS ?? '').split(','),
+              ]
+                .map((s) => s.trim().toLowerCase())
+                .map((s) => (s.includes('@') ? s.split('@')[1] : s))
+                .filter(Boolean),
+            );
+            if (domain && skip.has(domain)) {
+              return Response.json({ ok: true });
+            }
+          } catch {
+            /* if we can't resolve the email, fall through and notify */
+          }
+        }
+
         let companyName: string | undefined;
         try {
           if (payload?.companyId) {
