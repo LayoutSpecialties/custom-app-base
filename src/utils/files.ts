@@ -9,6 +9,7 @@ export interface FileItem {
   path: string;
   statusId: string | null; // folders only
   linkUrl?: string; // links only
+  updatedAt?: string;
 }
 
 export interface Crumb {
@@ -44,6 +45,7 @@ export interface RawFile {
   path?: string;
   name?: string;
   linkUrl?: string;
+  updatedAt?: string;
 }
 
 // Page through EVERY file in a channel (optionally under `path`). listFiles is
@@ -161,6 +163,7 @@ export async function getFolderView(
         path: f.path as string,
         statusId: object === 'folder' ? (statusMap[id] ?? null) : null,
         linkUrl: object === 'link' ? (f.linkUrl ?? undefined) : undefined,
+        updatedAt: f.updatedAt,
       };
     })
     .sort((a, b) => {

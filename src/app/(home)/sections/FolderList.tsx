@@ -169,6 +169,8 @@ export function FolderList({
   const [historyItem, setHistoryItem] = useState<FileItem | null>(null);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [sortKey, setSortKey] = useState<'name' | 'status' | 'modified'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pendingNotifyRef = useRef<string[]>([]);
@@ -439,6 +441,49 @@ export function FolderList({
     }
   }
 
+  function toggleSort(col: 'name' | 'status' | 'modified') {
+    if (sortKey === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(col);
+      setSortDir('asc');
+    }
+  }
+  const arrow = (col: string) =>
+    sortKey === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
+  const statusRank = (x: FileItem) => {
+    if (x.object !== 'folder') return Number.MAX_SAFE_INTEGER;
+    if (!x.statusId) return Number.MAX_SAFE_INTEGER - 1;
+    return statusById.get(x.statusId)?.sortOrder ?? Number.MAX_SAFE_INTEGER - 2;
+  };
+
+  // Folders always stay on top; the chosen column sorts within each group.
+  const sortedItems = [...items].sort((a, b) => {
+    const fr = (a.object === 'folder' ? 0 : 1) - (b.object === 'folder' ? 0 : 1);
+    if (fr !== 0) return fr;
+    let r = 0;
+    if (sortKey === 'name') r = a.name.localeCompare(b.name);
+    else if (sortKey === 'modified')
+      r = (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
+    else {
+      r = statusRank(a) - statusRank(b);
+      if (r === 0) r = a.name.localeCompare(b.name);
+    }
+    return sortDir === 'asc' ? r : -r;
+  });
+
+  const formatDate = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return isNaN(d.getTime())
+      ? ''
+      : d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+  };
+
   return (
     <section
       className={
@@ -595,52 +640,87 @@ export function FolderList({
           This folder is empty.
         </Body>
       ) : (
-        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200">
-          {items.map((item) => {
-            const status = item.statusId ? statusById.get(item.statusId) : undefined;
-            return (
-              <li key={item.id} className="flex items-center gap-3 px-4 py-3">
-                {item.object === 'folder' && <FolderIcon />}
-                {item.object === 'file' && <FileIcon />}
-                {item.object === 'link' && <LinkIcon />}
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500">
+            <button
+              type="button"
+              onClick={() => toggleSort('name')}
+              className="flex-1 min-w-0 text-left hover:text-gray-700"
+            >
+              Name{arrow('name')}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSort('status')}
+              className="w-52 shrink-0 text-left hover:text-gray-700"
+            >
+              Status{arrow('status')}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSort('modified')}
+              className="w-32 shrink-0 text-left hover:text-gray-700 hidden sm:block"
+            >
+              Modified{arrow('modified')}
+            </button>
+            <div className="w-8 shrink-0" />
+          </div>
 
-                {item.object === 'folder' ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(item.path)}
-                    className="font-medium text-gray-900 flex-1 min-w-0 truncate text-left hover:underline"
-                  >
-                    {item.name}
-                  </button>
-                ) : (
-                  <span className="font-medium text-gray-900 flex-1 min-w-0 truncate">
-                    {item.name}
-                  </span>
-                )}
-
-                {item.object === 'folder' &&
-                  (isInternal ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusDot color={status?.color ?? UNSET_COLOR} />
-                      <select
-                        className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50"
-                        value={item.statusId ?? ''}
-                        disabled={pendingId === item.id}
-                        onChange={(e) => changeStatus(item.id, e.target.value)}
+          <ul className="divide-y divide-gray-200">
+            {sortedItems.map((item) => {
+              const status = item.statusId
+                ? statusById.get(item.statusId)
+                : undefined;
+              return (
+                <li key={item.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {item.object === 'folder' && <FolderIcon />}
+                    {item.object === 'file' && <FileIcon />}
+                    {item.object === 'link' && <LinkIcon />}
+                    {item.object === 'folder' ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(item.path)}
+                        className="font-medium text-gray-900 min-w-0 truncate text-left hover:underline"
                       >
-                        <option value="">No status</option>
-                        {statuses.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <StatusBadge status={status} />
-                  ))}
+                        {item.name}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-gray-900 min-w-0 truncate">
+                        {item.name}
+                      </span>
+                    )}
+                  </div>
 
-                <ItemMenu
+                  <div className="w-52 shrink-0">
+                    {item.object === 'folder' &&
+                      (isInternal ? (
+                        <div className="flex items-center gap-2">
+                          <StatusDot color={status?.color ?? UNSET_COLOR} />
+                          <select
+                            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0"
+                            value={item.statusId ?? ''}
+                            disabled={pendingId === item.id}
+                            onChange={(e) => changeStatus(item.id, e.target.value)}
+                          >
+                            <option value="">No status</option>
+                            {statuses.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <StatusBadge status={status} />
+                      ))}
+                  </div>
+
+                  <div className="w-32 shrink-0 hidden sm:block text-sm text-gray-500">
+                    {formatDate(item.updatedAt)}
+                  </div>
+
+                  <ItemMenu
                   open={openMenuId === item.id}
                   onToggle={() =>
                     setOpenMenuId((cur) => (cur === item.id ? null : item.id))
@@ -701,10 +781,11 @@ export function FolderList({
                     Delete
                   </button>
                 </ItemMenu>
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {historyItem && (
