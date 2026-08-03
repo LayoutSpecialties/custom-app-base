@@ -451,10 +451,13 @@ export function FolderList({
   const arrow = (col: string) =>
     sortKey === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
 
+  // "No status" ranks before all real statuses (which run 0..n in your list
+  // order). So ascending goes No status -> ... -> Complete, and descending
+  // reverses it (Complete -> ... -> No status). Files stay below via grouping.
   const statusRank = (x: FileItem) => {
     if (x.object !== 'folder') return Number.MAX_SAFE_INTEGER;
-    if (!x.statusId) return Number.MAX_SAFE_INTEGER - 1;
-    return statusById.get(x.statusId)?.sortOrder ?? Number.MAX_SAFE_INTEGER - 2;
+    if (!x.statusId) return -1;
+    return statusById.get(x.statusId)?.sortOrder ?? -1;
   };
 
   // Folders always stay on top; the chosen column sorts within each group.
