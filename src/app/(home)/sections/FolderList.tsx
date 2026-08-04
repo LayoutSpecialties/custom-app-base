@@ -661,13 +661,11 @@ export function FolderList({
   const formatDate = (iso?: string) => {
     if (!iso) return '';
     const d = new Date(iso);
-    return isNaN(d.getTime())
-      ? ''
-      : d.toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        });
+    if (isNaN(d.getTime())) return '';
+    // Fixed MM/DD/YYYY so the column is always the same width.
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${mm}/${dd}/${d.getFullYear()}`;
   };
 
   function statusControl(item: FileItem, status?: StatusDef) {
@@ -977,7 +975,7 @@ export function FolderList({
             <button
               type="button"
               onClick={() => toggleSort('modified')}
-              className="w-32 shrink-0 text-left hover:text-gray-700 hidden sm:block"
+              className="w-24 shrink-0 text-left hover:text-gray-700 hidden lg:block"
             >
               Modified{arrow('modified')}
             </button>
@@ -1031,7 +1029,7 @@ export function FolderList({
                     {item.object === 'folder' && statusControl(item, status)}
                   </div>
 
-                  <div className="w-32 shrink-0 hidden sm:block text-sm text-gray-500">
+                  <div className="w-24 shrink-0 hidden lg:block text-sm text-gray-500">
                     {formatDate(item.updatedAt)}
                   </div>
 
