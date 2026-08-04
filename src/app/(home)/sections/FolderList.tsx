@@ -186,18 +186,40 @@ export function FolderList({
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const prefetchedRef = useRef<Set<string>>(new Set());
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingNotifyRef = useRef<string[]>([]);
   const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
+  function urlForPath(path: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (path) params.set('path', path);
+    else params.delete('path');
+    return `${pathname}?${params.toString()}`;
+  }
   function navigate(path: string) {
     if (isPending) return; // ignore extra clicks while a navigation is in flight
     setViewingArchived(false);
     setSelected(new Set());
-    const params = new URLSearchParams(searchParams.toString());
-    if (path) params.set('path', path);
-    else params.delete('path');
-    startTransition(() => router.push(`${pathname}?${params.toString()}`));
+    startTransition(() => router.push(urlForPath(path)));
+  }
+  // Warm a folder's contents once the cursor rests on it briefly, so the click
+  // feels instant. No-op on touch devices (no hover), and only fires once per
+  // folder after a short delay so sweeping the cursor doesn't spam requests.
+  function schedulePrefetch(path: string) {
+    if (prefetchedRef.current.has(path)) return;
+    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+    prefetchTimerRef.current = setTimeout(() => {
+      prefetchedRef.current.add(path);
+      router.prefetch(urlForPath(path));
+    }, 120);
+  }
+  function cancelPrefetch() {
+    if (prefetchTimerRef.current) {
+      clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
   }
 
   function downloadHref(fileId: string) {
@@ -615,7 +637,7 @@ export function FolderList({
           Drop files to upload to this folder
         </div>
       )}
-      <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         {viewingArchived ? (
           <span className="text-sm font-medium text-gray-900">
             Archived jobs
@@ -642,7 +664,7 @@ export function FolderList({
             ))}
           </nav>
         )}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           {(busy || isPending) && (
             <span className="text-sm text-gray-500">
               {isPending ? 'Loading…' : 'Working…'}
@@ -800,7 +822,7 @@ export function FolderList({
       )}
 
       {selected.size > 0 && (
-        <div className="mb-3 flex items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
           <span className="font-medium text-gray-700">
             {selected.size} selected
           </span>
@@ -863,7 +885,7 @@ export function FolderList({
             <button
               type="button"
               onClick={() => toggleSort('status')}
-              className="w-52 shrink-0 text-left hover:text-gray-700"
+              className="w-40 sm:w-52 shrink-0 text-left hover:text-gray-700"
             >
               Status{arrow('status')}
             </button>
@@ -899,6 +921,8 @@ export function FolderList({
                       <button
                         type="button"
                         onClick={() => navigate(item.path)}
+                        onMouseEnter={() => schedulePrefetch(item.path)}
+                        onMouseLeave={cancelPrefetch}
                         className="font-medium text-gray-900 min-w-0 truncate text-left hover:underline"
                       >
                         {item.name}
@@ -910,7 +934,7 @@ export function FolderList({
                     )}
                   </div>
 
-                  <div className="w-52 shrink-0">
+                  <div className="w-40 sm:w-52 shrink-0">
                     {item.object === 'folder' &&
                       (isInternal ? (
                         <div className="flex items-center gap-2">
