@@ -174,7 +174,7 @@ export function FolderList({
   const [sortKey, setSortKey] = useState<'name' | 'status' | 'modified'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [confirmArchive, setConfirmArchive] = useState<FileItem | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [viewingArchived, setViewingArchived] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pendingNotifyRef = useRef<string[]>([]);
@@ -182,6 +182,7 @@ export function FolderList({
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   function navigate(path: string) {
+    setViewingArchived(false);
     const params = new URLSearchParams(searchParams.toString());
     if (path) params.set('path', path);
     else params.delete('path');
@@ -492,19 +493,23 @@ export function FolderList({
   };
 
   // Folders always stay on top; the chosen column sorts within each group.
-  const sortedItems = [...items].sort((a, b) => {
-    const fr = (a.object === 'folder' ? 0 : 1) - (b.object === 'folder' ? 0 : 1);
-    if (fr !== 0) return fr;
-    let r = 0;
-    if (sortKey === 'name') r = a.name.localeCompare(b.name);
-    else if (sortKey === 'modified')
-      r = (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
-    else {
-      r = statusRank(a) - statusRank(b);
-      if (r === 0) r = a.name.localeCompare(b.name);
-    }
-    return sortDir === 'asc' ? r : -r;
-  });
+  const sortList = (arr: FileItem[]) =>
+    [...arr].sort((a, b) => {
+      const fr =
+        (a.object === 'folder' ? 0 : 1) - (b.object === 'folder' ? 0 : 1);
+      if (fr !== 0) return fr;
+      let r = 0;
+      if (sortKey === 'name') r = a.name.localeCompare(b.name);
+      else if (sortKey === 'modified')
+        r = (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
+      else {
+        r = statusRank(a) - statusRank(b);
+        if (r === 0) r = a.name.localeCompare(b.name);
+      }
+      return sortDir === 'asc' ? r : -r;
+    });
+
+  const listItems = sortList(viewingArchived ? archivedFolders : items);
 
   const formatDate = (iso?: string) => {
     if (!iso) return '';
@@ -530,82 +535,107 @@ export function FolderList({
         </div>
       )}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <nav className="flex items-center gap-1 text-sm text-gray-600 flex-wrap min-w-0">
-          {breadcrumb.map((crumb, i) => (
-            <span key={crumb.path} className="flex items-center gap-1">
-              {i > 0 && <span className="text-gray-300">/</span>}
-              {i < breadcrumb.length - 1 ? (
-                <button type="button" onClick={() => navigate(crumb.path)} className="hover:underline">
-                  {crumb.name}
-                </button>
-              ) : (
-                <span className="font-medium text-gray-900">{crumb.name}</span>
-              )}
-            </span>
-          ))}
-        </nav>
+        {viewingArchived ? (
+          <span className="text-sm font-medium text-gray-900">
+            Archived jobs
+          </span>
+        ) : (
+          <nav className="flex items-center gap-1 text-sm text-gray-600 flex-wrap min-w-0">
+            {breadcrumb.map((crumb, i) => (
+              <span key={crumb.path} className="flex items-center gap-1">
+                {i > 0 && <span className="text-gray-300">/</span>}
+                {i < breadcrumb.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(crumb.path)}
+                    className="hover:underline"
+                  >
+                    {crumb.name}
+                  </button>
+                ) : (
+                  <span className="font-medium text-gray-900">
+                    {crumb.name}
+                  </span>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
         <div className="flex items-center gap-2 shrink-0">
           {busy && <span className="text-sm text-gray-500">Working…</span>}
-          {currentPath === '' && (
+          {viewingArchived ? (
             <button
               type="button"
-              onClick={() => setShowArchived(true)}
+              onClick={() => setViewingArchived(false)}
               className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
-              Archived{archivedFolders.length ? ` (${archivedFolders.length})` : ''}
+              &larr; Active jobs
             </button>
+          ) : (
+            <>
+              {currentPath === '' && (
+                <button
+                  type="button"
+                  onClick={() => setViewingArchived(true)}
+                  className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Archived
+                  {archivedFolders.length ? ` (${archivedFolders.length})` : ''}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setNewFolderOpen((o) => !o);
+                  setNewFolderName('');
+                }}
+                className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                New folder
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files) uploadFileList(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              <input
+                ref={folderInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files) uploadFileList(e.target.files);
+                  e.target.value = '';
+                }}
+                {...({ webkitdirectory: '', directory: '' } as Record<
+                  string,
+                  string
+                >)}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => folderInputRef.current?.click()}
+                className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Upload folder
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                Upload
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setNewFolderOpen((o) => !o);
-              setNewFolderName('');
-            }}
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            New folder
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files) uploadFileList(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <input
-            ref={folderInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files) uploadFileList(e.target.files);
-              e.target.value = '';
-            }}
-            {...({ webkitdirectory: '', directory: '' } as Record<
-              string,
-              string
-            >)}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => folderInputRef.current?.click()}
-            className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Upload folder
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
-            className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            Upload
-          </button>
         </div>
       </div>
 
@@ -678,13 +708,13 @@ export function FolderList({
         </div>
       )}
 
-      {items.length === 0 ? (
+      {listItems.length === 0 ? (
         <Body size="base" className="text-gray-500">
-          This folder is empty.
+          {viewingArchived ? 'No archived jobs.' : 'This folder is empty.'}
         </Body>
       ) : (
-        <div className="rounded-lg border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500">
+        <div className="rounded-lg border border-gray-200">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg">
             <button
               type="button"
               onClick={() => toggleSort('name')}
@@ -710,7 +740,7 @@ export function FolderList({
           </div>
 
           <ul className="divide-y divide-gray-200">
-            {sortedItems.map((item) => {
+            {listItems.map((item) => {
               const status = item.statusId
                 ? statusById.get(item.statusId)
                 : undefined;
@@ -813,16 +843,30 @@ export function FolderList({
                       Status history
                     </button>
                   )}
-                  {item.object === 'folder' && currentPath === '' && (
+                  {item.object === 'folder' &&
+                    currentPath === '' &&
+                    !viewingArchived && (
+                      <button
+                        type="button"
+                        className={menuItemClass}
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          setConfirmArchive(item);
+                        }}
+                      >
+                        Archive
+                      </button>
+                    )}
+                  {viewingArchived && (
                     <button
                       type="button"
                       className={menuItemClass}
                       onClick={() => {
                         setOpenMenuId(null);
-                        setConfirmArchive(item);
+                        setArchived(item, false);
                       }}
                     >
-                      Archive
+                      Unarchive
                     </button>
                   )}
                   <button
@@ -935,61 +979,6 @@ export function FolderList({
         </div>
       )}
 
-      {showArchived && (
-        <div
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
-          onClick={() => setShowArchived(false)}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-auto p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <Heading size="lg">Archived jobs</Heading>
-              <button
-                type="button"
-                onClick={() => setShowArchived(false)}
-                className="text-gray-500 hover:bg-gray-100 rounded px-2 leading-none"
-              >
-                &#10005;
-              </button>
-            </div>
-            {archivedFolders.length === 0 ? (
-              <Body size="sm" className="text-gray-500">
-                No archived jobs.
-              </Body>
-            ) : (
-              <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg">
-                {archivedFolders.map((folder) => {
-                  const status = folder.statusId
-                    ? statusById.get(folder.statusId)
-                    : undefined;
-                  return (
-                    <li
-                      key={folder.id}
-                      className="flex items-center gap-3 px-4 py-3"
-                    >
-                      <FolderIcon />
-                      <span className="font-medium text-gray-900 flex-1 min-w-0 truncate">
-                        {folder.name}
-                      </span>
-                      <StatusBadge status={status} />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setArchived(folder, false)}
-                        className="text-sm px-2 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 shrink-0"
-                      >
-                        Unarchive
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
