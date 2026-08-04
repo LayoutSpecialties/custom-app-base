@@ -1,5 +1,5 @@
 import { assemblyClient } from '@/utils/assembly';
-import { getFolderStatusMap, listStatuses } from '@/utils/db';
+import { getArchivedSet, getFolderStatusMap, listStatuses } from '@/utils/db';
 import type { StatusDef } from '@/utils/status';
 
 export interface FileItem {
@@ -32,6 +32,7 @@ export interface FolderView {
   currentPath: string;
   breadcrumb: Crumb[];
   items: FileItem[];
+  archivedFolders: FileItem[]; // archived top-level jobs (root view only)
 }
 
 // Internal users may view any company; we cap the picker list for now.
@@ -87,7 +88,13 @@ export async function getFolderView(
   const isInternal = !!payload?.internalUserId;
 
   const statuses = await listStatuses();
-  const empty = { statuses, currentPath: '', breadcrumb: [], items: [] };
+  const empty = {
+    statuses,
+    currentPath: '',
+    breadcrumb: [],
+    items: [],
+    archivedFolders: [],
+  };
 
   let companyId: string | undefined;
   let companyName: string | undefined;
@@ -146,6 +153,7 @@ export async function getFolderView(
   // direct children of currentPath (paths whose remainder has no '/').
   const files = await listAllFiles(assembly, channelId);
   const statusMap = await getFolderStatusMap(channelId);
+  const archivedSet = await getArchivedSet(channelId);
   const prefix = currentPath ? `${currentPath}/` : '';
 
   const items: FileItem[] = files
@@ -172,6 +180,19 @@ export async function getFolderView(
       return a.name.localeCompare(b.name);
     });
 
+  // At the root jobs view, split archived top-level folders out of the active
+  // list into their own list (for the "Archived" view). Archiving only applies
+  // to top-level folders, so nested views are never filtered.
+  const archivedFolders: FileItem[] = [];
+  const visibleItems: FileItem[] = [];
+  for (const it of items) {
+    if (currentPath === '' && it.object === 'folder' && archivedSet.has(it.id)) {
+      archivedFolders.push(it);
+    } else {
+      visibleItems.push(it);
+    }
+  }
+
   // Breadcrumb: company root, then each path segment.
   const breadcrumb: Crumb[] = [{ name: companyName ?? 'Home', path: '' }];
   let acc = '';
@@ -189,6 +210,7 @@ export async function getFolderView(
     statuses,
     currentPath,
     breadcrumb,
-    items,
+    items: visibleItems,
+    archivedFolders,
   };
 }

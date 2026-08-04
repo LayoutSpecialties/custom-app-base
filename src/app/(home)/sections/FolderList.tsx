@@ -139,6 +139,7 @@ async function uploadsFromDataTransfer(dt: DataTransfer): Promise<Upload[]> {
 export function FolderList({
   breadcrumb,
   items,
+  archivedFolders,
   currentPath,
   statuses,
   isInternal,
@@ -148,6 +149,7 @@ export function FolderList({
 }: {
   breadcrumb: Crumb[];
   items: FileItem[];
+  archivedFolders: FileItem[];
   currentPath: string;
   statuses: StatusDef[];
   isInternal: boolean;
@@ -171,6 +173,8 @@ export function FolderList({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'status' | 'modified'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [confirmArchive, setConfirmArchive] = useState<FileItem | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pendingNotifyRef = useRef<string[]>([]);
@@ -419,6 +423,33 @@ export function FolderList({
     }
   }
 
+  async function setArchived(item: FileItem, archived: boolean) {
+    if (!channelId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/folder-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          channelId,
+          folderId: item.id,
+          archived,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `Failed (${res.status})`);
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update archive');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function changeStatus(folderId: string, statusId: string) {
     if (!channelId) return;
     setPendingId(folderId);
@@ -515,6 +546,15 @@ export function FolderList({
         </nav>
         <div className="flex items-center gap-2 shrink-0">
           {busy && <span className="text-sm text-gray-500">Working…</span>}
+          {currentPath === '' && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Archived{archivedFolders.length ? ` (${archivedFolders.length})` : ''}
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -773,6 +813,18 @@ export function FolderList({
                       Status history
                     </button>
                   )}
+                  {item.object === 'folder' && currentPath === '' && (
+                    <button
+                      type="button"
+                      className={menuItemClass}
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        setConfirmArchive(item);
+                      }}
+                    >
+                      Archive
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`${menuItemClass} text-red-600`}
@@ -837,6 +889,102 @@ export function FolderList({
                     </div>
                   </li>
                 ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {confirmArchive && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setConfirmArchive(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Heading size="lg">Archive job?</Heading>
+            <Body size="sm" className="text-gray-600 mt-2">
+              &ldquo;{confirmArchive.name}&rdquo; will be hidden from the jobs
+              list for everyone. You can unarchive it anytime from the Archived
+              list.
+            </Body>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(null)}
+                className="text-sm px-3 py-1 rounded-md text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  const it = confirmArchive;
+                  setConfirmArchive(null);
+                  await setArchived(it, true);
+                }}
+                className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-40"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showArchived && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setShowArchived(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-auto p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <Heading size="lg">Archived jobs</Heading>
+              <button
+                type="button"
+                onClick={() => setShowArchived(false)}
+                className="text-gray-500 hover:bg-gray-100 rounded px-2 leading-none"
+              >
+                &#10005;
+              </button>
+            </div>
+            {archivedFolders.length === 0 ? (
+              <Body size="sm" className="text-gray-500">
+                No archived jobs.
+              </Body>
+            ) : (
+              <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg">
+                {archivedFolders.map((folder) => {
+                  const status = folder.statusId
+                    ? statusById.get(folder.statusId)
+                    : undefined;
+                  return (
+                    <li
+                      key={folder.id}
+                      className="flex items-center gap-3 px-4 py-3"
+                    >
+                      <FolderIcon />
+                      <span className="font-medium text-gray-900 flex-1 min-w-0 truncate">
+                        {folder.name}
+                      </span>
+                      <StatusBadge status={status} />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setArchived(folder, false)}
+                        className="text-sm px-2 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                      >
+                        Unarchive
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

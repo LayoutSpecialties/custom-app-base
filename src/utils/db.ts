@@ -52,6 +52,13 @@ async function ready() {
     )`;
     await sql`CREATE INDEX IF NOT EXISTS status_history_folder_idx
               ON status_history (channel_id, folder_id, changed_at DESC)`;
+    await sql`CREATE TABLE IF NOT EXISTS folder_archive (
+      channel_id  text NOT NULL,
+      folder_id   text NOT NULL,
+      archived_by text,
+      archived_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (channel_id, folder_id)
+    )`;
     const existing = (await sql`SELECT count(*)::int AS n FROM statuses`) as {
       n: number;
     }[];
@@ -133,6 +140,36 @@ export async function setFolderStatus(
   await sql`INSERT INTO status_history
               (channel_id, folder_id, status_id, status_label, status_color, changed_by)
             VALUES (${channelId}, ${folderId}, ${statusId}, ${label}, ${color}, ${updatedBy ?? null})`;
+}
+
+// A folder is archived (hidden from the active jobs list) if it has a row here.
+// Shared: one flag per folder, affecting both internal and client views.
+export async function getArchivedSet(channelId: string): Promise<Set<string>> {
+  const sql = await ready();
+  if (!sql) return new Set();
+  const rows = (await sql`SELECT folder_id FROM folder_archive
+                          WHERE channel_id = ${channelId}`) as {
+    folder_id: string;
+  }[];
+  return new Set(rows.map((r) => r.folder_id));
+}
+
+export async function setArchived(
+  channelId: string,
+  folderId: string,
+  archived: boolean,
+  by?: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  if (archived) {
+    await sql`INSERT INTO folder_archive (channel_id, folder_id, archived_by)
+              VALUES (${channelId}, ${folderId}, ${by ?? null})
+              ON CONFLICT (channel_id, folder_id) DO NOTHING`;
+  } else {
+    await sql`DELETE FROM folder_archive
+              WHERE channel_id = ${channelId} AND folder_id = ${folderId}`;
+  }
 }
 
 export interface HistoryRow {

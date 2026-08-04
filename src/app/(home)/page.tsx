@@ -53,6 +53,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
         <FolderList
           breadcrumb={view.breadcrumb}
           items={view.items}
+          archivedFolders={view.archivedFolders}
           currentPath={view.currentPath}
           statuses={view.statuses}
           isInternal={view.isInternal}
