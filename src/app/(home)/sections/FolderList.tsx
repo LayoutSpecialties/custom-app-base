@@ -1079,7 +1079,7 @@ export function FolderList({
                           onClick={() => navigate(item.path)}
                           onMouseEnter={() => schedulePrefetch(item.path)}
                           onMouseLeave={cancelPrefetch}
-                          className={`block w-full font-medium text-gray-900 text-left hover:underline ${stacked ? 'break-words' : 'truncate'}`}
+                          className={`block w-full text-sm font-medium text-gray-900 text-left hover:underline ${stacked ? 'break-words' : 'truncate'}`}
                         >
                           {item.name}
                         </button>
@@ -1087,7 +1087,7 @@ export function FolderList({
                         <span
                           data-name
                           title={item.name}
-                          className={`block w-full font-medium text-gray-900 ${stacked ? 'break-words' : 'truncate'}`}
+                          className={`block w-full text-sm font-medium text-gray-900 ${stacked ? 'break-words' : 'truncate'}`}
                         >
                           {item.name}
                         </span>
