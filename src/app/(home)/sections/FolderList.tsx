@@ -1079,9 +1079,13 @@ export function FolderList({
                         </span>
                       )}
                       {/* When the widest name won't fit beside the columns, the
-                          Status and Modified columns stack under the name so it
-                          stays fully readable (no horizontal scroll). */}
-                      <div className={`${stacked ? 'block' : 'hidden'} mt-1 space-y-1`}>
+                          Status and Modified columns move below the name — in a
+                          single wrapping row — so the name stays fully readable
+                          (no horizontal scroll). Created By slots in here too,
+                          left of Modified, once added. */}
+                      <div
+                        className={`${stacked ? 'flex' : 'hidden'} flex-wrap items-center gap-x-3 gap-y-1 mt-1`}
+                      >
                         {item.object === 'folder' && statusControl(item, status)}
                         {item.updatedAt && (
                           <div className="text-xs text-gray-500">
