@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useTransition,
+  type ReactNode,
+} from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Body, Heading } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
@@ -160,6 +166,7 @@ export function FolderList({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -184,12 +191,13 @@ export function FolderList({
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   function navigate(path: string) {
+    if (isPending) return; // ignore extra clicks while a navigation is in flight
     setViewingArchived(false);
     setSelected(new Set());
     const params = new URLSearchParams(searchParams.toString());
     if (path) params.set('path', path);
     else params.delete('path');
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
   }
 
   function downloadHref(fileId: string) {
@@ -635,7 +643,11 @@ export function FolderList({
           </nav>
         )}
         <div className="flex items-center gap-2 shrink-0">
-          {busy && <span className="text-sm text-gray-500">Working…</span>}
+          {(busy || isPending) && (
+            <span className="text-sm text-gray-500">
+              {isPending ? 'Loading…' : 'Working…'}
+            </span>
+          )}
           {viewingArchived ? (
             <button
               type="button"
@@ -835,7 +847,11 @@ export function FolderList({
           {viewingArchived ? 'No archived jobs.' : 'This folder is empty.'}
         </Body>
       ) : (
-        <div className="rounded-lg border border-gray-200">
+        <div
+          className={`rounded-lg border border-gray-200 transition-opacity ${
+            isPending ? 'opacity-50 pointer-events-none' : ''
+          }`}
+        >
           <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg">
             <button
               type="button"

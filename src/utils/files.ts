@@ -38,6 +38,12 @@ export interface FolderView {
 // Internal users may view any company; we cap the picker list for now.
 const COMPANY_LIMIT = 100;
 
+// Cache the (single-workspace) company list briefly so internal navigations
+// don't re-page the whole list on every load. New companies appear within the
+// TTL. Lives per warm serverless instance.
+let companiesCache: { at: number; list: CompanyOption[] } | null = null;
+const COMPANIES_TTL_MS = 60_000;
+
 type AssemblySdk = Awaited<ReturnType<typeof assemblyClient>>;
 
 export interface RawFile {
@@ -101,25 +107,30 @@ export async function getFolderView(
   let companies: CompanyOption[] | undefined;
 
   if (isInternal) {
-    // Page through all non-placeholder companies (placeholder companies have
-    // no name and would show as blank rows). Native <select> scrolls a long
-    // list on its own.
-    const raw: { id?: string; name?: string }[] = [];
-    let nextToken: string | undefined;
-    let guard = 0;
-    do {
-      const list = await assembly.listCompanies({
-        isPlaceholder: false,
-        limit: COMPANY_LIMIT,
-        nextToken,
-      });
-      raw.push(...(list.data ?? []));
-      nextToken = (list as { nextToken?: string }).nextToken;
-    } while (nextToken && ++guard < 20);
-    companies = raw
-      .map((c) => ({ id: c.id ?? '', name: (c.name ?? '').trim() }))
-      .filter((c) => c.id && c.name)
-      .sort((a, b) => a.name.localeCompare(b.name));
+    if (companiesCache && Date.now() - companiesCache.at < COMPANIES_TTL_MS) {
+      companies = companiesCache.list;
+    } else {
+      // Page through all non-placeholder companies (placeholder companies have
+      // no name and would show as blank rows). Native <select> scrolls a long
+      // list on its own.
+      const raw: { id?: string; name?: string }[] = [];
+      let nextToken: string | undefined;
+      let guard = 0;
+      do {
+        const list = await assembly.listCompanies({
+          isPlaceholder: false,
+          limit: COMPANY_LIMIT,
+          nextToken,
+        });
+        raw.push(...(list.data ?? []));
+        nextToken = (list as { nextToken?: string }).nextToken;
+      } while (nextToken && ++guard < 20);
+      companies = raw
+        .map((c) => ({ id: c.id ?? '', name: (c.name ?? '').trim() }))
+        .filter((c) => c.id && c.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      companiesCache = { at: Date.now(), list: companies };
+    }
     // Prefer an explicit dropdown choice (?companyId=), then the company the
     // app was opened from if Assembly passes one in the token, then the first.
     const known = (id: string | undefined | null): id is string =>

@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 // other users — file changes from Assembly and status changes from the DB —
 // without anyone manually reloading. Client component state (e.g. a dropdown
 // mid-edit) is preserved across refreshes.
-export function AutoRefresh({ intervalMs = 10000 }: { intervalMs?: number }) {
+export function AutoRefresh({ intervalMs = 20000 }: { intervalMs?: number }) {
   const router = useRouter();
 
   useEffect(() => {
