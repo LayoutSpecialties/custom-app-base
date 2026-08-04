@@ -3,6 +3,11 @@ import { listAllFiles } from '@/utils/files';
 import { sendUploadNotification } from '@/utils/email';
 import { withRateLimitRetry } from '@/utils/retry';
 
+// Allow the full Vercel free-plan budget: a folder upload (ensureFolders) or a
+// recursive delete can make many Assembly calls in one request, and the 429
+// backoff below adds waits — without this the default (~10s) would time out.
+export const maxDuration = 60;
+
 // File-management actions. Upload/New Folder/Delete are available to both
 // clients and internal users (per project decision). Everyone is scoped to a
 // channel server-side: clients to their own company, internal to ?companyId=.
@@ -48,10 +53,12 @@ export async function POST(request: Request) {
           return Response.json({ error: 'Name is required' }, { status: 400 });
         const parent = body.path ?? '';
         const fullPath = parent ? `${parent}/${name}` : name;
-        const res = await assembly.createFile({
-          fileType: 'file',
-          requestBody: { path: fullPath, channelId },
-        });
+        const res = await withRateLimitRetry(() =>
+          assembly.createFile({
+            fileType: 'file',
+            requestBody: { path: fullPath, channelId },
+          }),
+        );
         // uploadUrl is returned by the API but not in the SDK's typed shape.
         const uploadUrl = (res as { uploadUrl?: string }).uploadUrl;
         if (!uploadUrl)
@@ -64,14 +71,23 @@ export async function POST(request: Request) {
 
       case 'ensureFolders': {
         // Create each folder in order (shallowest first). Ignore per-folder
-        // errors so already-existing folders don't abort a folder upload.
+        // errors so already-existing folders don't abort a folder upload — an
+        // "already exists" error isn't a rate limit, so withRateLimitRetry
+        // re-throws it immediately and the catch swallows it. Only genuine 429s
+        // wait+retry; kept to a short bounded backoff so a deep folder tree in a
+        // single request can't approach the function timeout.
         for (const p of body.paths ?? []) {
           if (!p) continue;
           try {
-            await assembly.createFile({
-              fileType: 'folder',
-              requestBody: { path: p, channelId },
-            });
+            await withRateLimitRetry(
+              () =>
+                assembly.createFile({
+                  fileType: 'folder',
+                  requestBody: { path: p, channelId },
+                }),
+              4,
+              400,
+            );
           } catch {
             /* folder likely already exists */
           }
@@ -137,10 +153,12 @@ export async function POST(request: Request) {
           );
         const parent = body.path ?? '';
         const fullPath = parent ? `${parent}/${name}` : name;
-        await assembly.createFile({
-          fileType: 'folder',
-          requestBody: { path: fullPath, channelId },
-        });
+        await withRateLimitRetry(() =>
+          assembly.createFile({
+            fileType: 'folder',
+            requestBody: { path: fullPath, channelId },
+          }),
+        );
         return Response.json({ ok: true });
       }
 
