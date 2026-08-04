@@ -192,19 +192,28 @@ export function FolderList({
   const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  const selectionBarRef = useRef<HTMLDivElement>(null);
+  const [selectionBarHeight, setSelectionBarHeight] = useState(0);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
-  // The toolbar is pinned at the top; the column header pins just below it.
-  // Track the toolbar's height so that offset stays correct as its buttons wrap
+  // The pinned bars stack from the top: toolbar, then the selection bar (only
+  // while items are selected), then the column header. Each one pins just below
+  // the one above, so we track their heights — they change as their buttons wrap
   // onto a second row on narrow screens.
   useEffect(() => {
-    const el = toolbarRef.current;
-    if (!el) return;
-    const update = () => setToolbarHeight(el.offsetHeight);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
+    const targets: [HTMLElement | null, (n: number) => void][] = [
+      [toolbarRef.current, setToolbarHeight],
+      [selectionBarRef.current, setSelectionBarHeight],
+    ];
+    const observers = targets.map(([el, set]) => {
+      if (!el) return null;
+      const update = () => set(el.offsetHeight);
+      update();
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return ro;
+    });
+    return () => observers.forEach((ro) => ro?.disconnect());
   }, []);
 
   function urlForPath(path: string) {
@@ -862,7 +871,13 @@ export function FolderList({
         </div>
       )}
 
-      <div className="mb-3 min-h-[44px]">
+      <div
+        ref={selectionBarRef}
+        className={`mb-3 min-h-[44px] ${
+          selected.size > 0 ? 'sticky z-10 bg-white' : ''
+        }`}
+        style={selected.size > 0 ? { top: toolbarHeight } : undefined}
+      >
         {selected.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
             <span className="font-medium text-gray-700">
@@ -919,7 +934,9 @@ export function FolderList({
         >
           <div
             className="sticky z-10 flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg"
-            style={{ top: toolbarHeight }}
+            style={{
+              top: toolbarHeight + (selected.size > 0 ? selectionBarHeight : 0),
+            }}
           >
             <button
               type="button"
