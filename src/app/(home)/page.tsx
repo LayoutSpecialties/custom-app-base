@@ -37,7 +37,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     <>
       <BridgeConfigProvider portalUrl={session?.workspace?.portalUrl} />
       <AutoRefresh />
-      <Container className="max-w-screen-lg">
+      <Container>
         {view.isInternal && (
           <div className="flex items-center gap-4 mb-6">
             <div className="flex-1 min-w-0">
