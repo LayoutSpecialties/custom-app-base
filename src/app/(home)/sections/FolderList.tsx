@@ -968,7 +968,7 @@ export function FolderList({
             <button
               type="button"
               onClick={() => toggleSort('status')}
-              className="hidden sm:block sm:w-52 shrink-0 text-left hover:text-gray-700"
+              className="hidden lg:block lg:w-52 shrink-0 text-left hover:text-gray-700"
             >
               Status{arrow('status')}
             </button>
@@ -1016,16 +1016,21 @@ export function FolderList({
                           {item.name}
                         </span>
                       )}
-                      {/* Status stacks under the name on small screens. */}
-                      {item.object === 'folder' && (
-                        <div className="sm:hidden mt-1">
-                          {statusControl(item, status)}
-                        </div>
-                      )}
+                      {/* Below lg, the Status and Modified columns stack under
+                          the name so it's never squeezed and all data stays
+                          visible without a horizontal scroll. */}
+                      <div className="lg:hidden mt-1 space-y-1">
+                        {item.object === 'folder' && statusControl(item, status)}
+                        {item.updatedAt && (
+                          <div className="text-xs text-gray-500">
+                            Modified {formatDate(item.updatedAt)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="hidden sm:block sm:w-52 shrink-0">
+                  <div className="hidden lg:block lg:w-52 shrink-0">
                     {item.object === 'folder' && statusControl(item, status)}
                   </div>
 
