@@ -190,7 +190,22 @@ export function FolderList({
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingNotifyRef = useRef<string[]>([]);
   const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
+
+  // The toolbar is pinned at the top; the column header pins just below it.
+  // Track the toolbar's height so that offset stays correct as its buttons wrap
+  // onto a second row on narrow screens.
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (!el) return;
+    const update = () => setToolbarHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   function urlForPath(path: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -660,7 +675,10 @@ export function FolderList({
           Drop files to upload to this folder
         </div>
       )}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div
+        ref={toolbarRef}
+        className="sticky top-0 z-20 mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-white py-2"
+      >
         {viewingArchived ? (
           <span className="text-sm font-medium text-gray-900">
             Archived jobs
@@ -899,7 +917,10 @@ export function FolderList({
             isPending ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
-          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg">
+          <div
+            className="sticky z-10 flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg"
+            style={{ top: toolbarHeight }}
+          >
             <button
               type="button"
               onClick={() => toggleSort('name')}
