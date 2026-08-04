@@ -64,11 +64,11 @@ export function ManageStatuses({
       {open && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-30"
             aria-hidden="true"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
+          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
             <div className="mb-2">
               <Heading size="lg">Manage statuses</Heading>
               <Body size="sm" className="text-gray-500 mt-1">
