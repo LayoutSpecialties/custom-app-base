@@ -592,8 +592,9 @@ export function FolderList({
     setBusy(true);
     setError(null);
     // Process a few at a time instead of one-by-one, so bulk actions finish
-    // roughly N-times faster while staying gentle on the Assembly API.
-    const CONCURRENCY = 5;
+    // several times faster. Kept modest (and the server retries on 429) to stay
+    // under the Assembly API rate limit.
+    const CONCURRENCY = 3;
     let firstError: Error | null = null;
     let index = 0;
     async function worker() {

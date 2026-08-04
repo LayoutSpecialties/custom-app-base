@@ -1,6 +1,7 @@
 import { assemblyClient } from '@/utils/assembly';
 import { listAllFiles } from '@/utils/files';
 import { sendUploadNotification } from '@/utils/email';
+import { withRateLimitRetry } from '@/utils/retry';
 
 // File-management actions. Upload/New Folder/Delete are available to both
 // clients and internal users (per project decision). Everyone is scoped to a
@@ -160,10 +161,13 @@ export async function POST(request: Request) {
               (a.path as string).split('/').length,
           );
           for (const d of descendants) {
-            if (d.id) await assembly.deleteFile({ id: d.id });
+            if (d.id)
+              await withRateLimitRetry(() => assembly.deleteFile({ id: d.id! }));
           }
         }
-        await assembly.deleteFile({ id: body.fileId });
+        await withRateLimitRetry(() =>
+          assembly.deleteFile({ id: body.fileId! }),
+        );
         return Response.json({ ok: true });
       }
 
