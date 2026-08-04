@@ -136,24 +136,27 @@ export async function getFolderView(
 
   if (!companyId) return { isInternal, companies, ...empty };
 
-  if (!companyName) {
-    const company = await assembly.retrieveCompany({ id: companyId });
-    companyName = company.name;
-  }
+  // Resolve the company name (clients only) and the file channel in parallel.
+  const [company, channels] = await Promise.all([
+    companyName
+      ? Promise.resolve(null)
+      : assembly.retrieveCompany({ id: companyId }),
+    assembly.listFileChannels({ membershipType: 'company', companyId }),
+  ]);
+  if (company) companyName = company.name ?? companyName;
 
-  const channels = await assembly.listFileChannels({
-    membershipType: 'company',
-    companyId,
-  });
   const channelId = channels.data?.[0]?.id;
   if (!channelId)
     return { isInternal, companyId, companyName, companies, ...empty };
 
-  // listFiles returns a flat, recursive list for the whole channel. Take the
-  // direct children of currentPath (paths whose remainder has no '/').
-  const files = await listAllFiles(assembly, channelId);
-  const statusMap = await getFolderStatusMap(channelId);
-  const archivedSet = await getArchivedSet(channelId);
+  // Fetch the file list, the status map, and the archived set in parallel.
+  // Scope the file list to the current folder's subtree when drilling in (root
+  // needs the whole channel to list top-level jobs + compute archived).
+  const [files, statusMap, archivedSet] = await Promise.all([
+    listAllFiles(assembly, channelId, currentPath || undefined),
+    getFolderStatusMap(channelId),
+    getArchivedSet(channelId),
+  ]);
   const prefix = currentPath ? `${currentPath}/` : '';
 
   const items: FileItem[] = files

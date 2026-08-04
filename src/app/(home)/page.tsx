@@ -25,12 +25,13 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
     'path' in searchParams && typeof searchParams.path === 'string'
       ? searchParams.path
       : '';
-  // getSession is only used for the portal URL below; it hits a session-scoped
-  // endpoint that can 403 as the token ages, so never let it crash the page.
-  const session = await getSession(searchParams).catch(() => null);
-  const view = await withRetry(() =>
-    getFolderView(token, selectedCompanyId, currentPath),
-  );
+  // Run both in parallel. getSession is only used for the portal URL below; it
+  // hits a session-scoped endpoint that can 403 as the token ages, so never let
+  // it crash the page.
+  const [session, view] = await Promise.all([
+    getSession(searchParams).catch(() => null),
+    withRetry(() => getFolderView(token, selectedCompanyId, currentPath)),
+  ]);
 
   return (
     <>
