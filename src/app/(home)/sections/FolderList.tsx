@@ -591,19 +591,38 @@ export function FolderList({
     if (targets.length === 0) return;
     setBusy(true);
     setError(null);
-    try {
-      for (const it of targets) {
-        const res = await fn(it);
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || `Failed (${res.status})`);
+    // Process a few at a time instead of one-by-one, so bulk actions finish
+    // roughly N-times faster while staying gentle on the Assembly API.
+    const CONCURRENCY = 5;
+    let firstError: Error | null = null;
+    let index = 0;
+    async function worker() {
+      while (index < targets.length) {
+        const it = targets[index++];
+        try {
+          const res = await fn(it);
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `Failed (${res.status})`);
+          }
+        } catch (e) {
+          if (!firstError)
+            firstError = e instanceof Error ? e : new Error('Bulk action failed');
         }
       }
+    }
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker),
+      );
+      if (firstError) throw firstError;
       setSelected(new Set());
-      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk action failed');
     } finally {
+      // Refresh either way: on a partial failure some items were still removed,
+      // so the list needs to reflect what actually happened.
+      router.refresh();
       setBusy(false);
     }
   }
