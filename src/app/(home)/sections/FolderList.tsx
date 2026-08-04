@@ -626,6 +626,29 @@ export function FolderList({
         });
   };
 
+  function statusControl(item: FileItem, status?: StatusDef) {
+    return isInternal ? (
+      <div className="flex items-center gap-2">
+        <StatusDot color={status?.color ?? UNSET_COLOR} />
+        <select
+          className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0"
+          value={item.statusId ?? ''}
+          disabled={pendingId === item.id}
+          onChange={(e) => changeStatus(item.id, e.target.value)}
+        >
+          <option value="">No status</option>
+          {statuses.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    ) : (
+      <StatusBadge status={status} />
+    );
+  }
+
   return (
     <section
       className={
@@ -887,7 +910,7 @@ export function FolderList({
             <button
               type="button"
               onClick={() => toggleSort('status')}
-              className="w-40 sm:w-52 shrink-0 text-left hover:text-gray-700"
+              className="hidden sm:block sm:w-52 shrink-0 text-left hover:text-gray-700"
             >
               Status{arrow('status')}
             </button>
@@ -919,45 +942,33 @@ export function FolderList({
                     {item.object === 'folder' && <FolderIcon />}
                     {item.object === 'file' && <FileIcon />}
                     {item.object === 'link' && <LinkIcon />}
-                    {item.object === 'folder' ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate(item.path)}
-                        onMouseEnter={() => schedulePrefetch(item.path)}
-                        onMouseLeave={cancelPrefetch}
-                        className="font-medium text-gray-900 min-w-0 truncate text-left hover:underline"
-                      >
-                        {item.name}
-                      </button>
-                    ) : (
-                      <span className="font-medium text-gray-900 min-w-0 truncate">
-                        {item.name}
-                      </span>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      {item.object === 'folder' ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(item.path)}
+                          onMouseEnter={() => schedulePrefetch(item.path)}
+                          onMouseLeave={cancelPrefetch}
+                          className="block w-full font-medium text-gray-900 truncate text-left hover:underline"
+                        >
+                          {item.name}
+                        </button>
+                      ) : (
+                        <span className="block w-full font-medium text-gray-900 truncate">
+                          {item.name}
+                        </span>
+                      )}
+                      {/* Status stacks under the name on small screens. */}
+                      {item.object === 'folder' && (
+                        <div className="sm:hidden mt-1">
+                          {statusControl(item, status)}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="w-40 sm:w-52 shrink-0">
-                    {item.object === 'folder' &&
-                      (isInternal ? (
-                        <div className="flex items-center gap-2">
-                          <StatusDot color={status?.color ?? UNSET_COLOR} />
-                          <select
-                            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0"
-                            value={item.statusId ?? ''}
-                            disabled={pendingId === item.id}
-                            onChange={(e) => changeStatus(item.id, e.target.value)}
-                          >
-                            <option value="">No status</option>
-                            {statuses.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <StatusBadge status={status} />
-                      ))}
+                  <div className="hidden sm:block sm:w-52 shrink-0">
+                    {item.object === 'folder' && statusControl(item, status)}
                   </div>
 
                   <div className="w-32 shrink-0 hidden sm:block text-sm text-gray-500">
