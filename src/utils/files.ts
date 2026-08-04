@@ -1,5 +1,6 @@
 import { assemblyClient } from '@/utils/assembly';
 import { getArchivedSet, getFolderStatusMap, listStatuses } from '@/utils/db';
+import { withRateLimitRetry } from '@/utils/retry';
 import type { StatusDef } from '@/utils/status';
 
 export interface FileItem {
@@ -10,6 +11,8 @@ export interface FileItem {
   statusId: string | null; // folders only
   linkUrl?: string; // links only
   updatedAt?: string;
+  creatorId?: string;
+  creatorName?: string; // resolved display name (all viewers)
 }
 
 export interface Crumb {
@@ -53,6 +56,58 @@ export interface RawFile {
   name?: string;
   linkUrl?: string;
   updatedAt?: string;
+  creatorId?: string;
+}
+
+// Resolve a creator id (an internal teammate or a client) to a display name.
+// Cached across requests so the 20s auto-refresh doesn't re-resolve every load.
+const creatorCache = new Map<string, { at: number; name: string }>();
+const CREATOR_TTL_MS = 5 * 60_000;
+
+async function resolveCreatorName(
+  assembly: AssemblySdk,
+  id: string,
+): Promise<string> {
+  const hit = creatorCache.get(id);
+  if (hit && Date.now() - hit.at < CREATOR_TTL_MS) return hit.name;
+  const nameOf = (u: {
+    givenName?: string;
+    familyName?: string;
+    email?: string;
+  }) => [u.givenName, u.familyName].filter(Boolean).join(' ') || u.email || '';
+  let name = '';
+  try {
+    name = nameOf(
+      await withRateLimitRetry(() => assembly.retrieveInternalUser({ id })),
+    );
+  } catch {
+    try {
+      name = nameOf(
+        await withRateLimitRetry(() => assembly.retrieveClient({ id })),
+      );
+    } catch {
+      /* neither an internal user nor a client we can read */
+    }
+  }
+  if (name) creatorCache.set(id, { at: Date.now(), name });
+  return name || 'Unknown';
+}
+
+// Resolve many creator ids with a small concurrency cap (gentle on the API).
+async function resolveCreatorNames(
+  assembly: AssemblySdk,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  let i = 0;
+  const worker = async () => {
+    while (i < ids.length) {
+      const id = ids[i++];
+      map.set(id, await resolveCreatorName(assembly, id));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(5, ids.length) }, worker));
+  return map;
 }
 
 // Page through EVERY file in a channel (optionally under `path`). listFiles is
@@ -186,6 +241,7 @@ export async function getFolderView(
         statusId: object === 'folder' ? (statusMap[id] ?? null) : null,
         linkUrl: object === 'link' ? (f.linkUrl ?? undefined) : undefined,
         updatedAt: f.updatedAt,
+        creatorId: f.creatorId,
       };
     })
     .sort((a, b) => {
@@ -204,6 +260,21 @@ export async function getFolderView(
       archivedFolders.push(it);
     } else {
       visibleItems.push(it);
+    }
+  }
+
+  // Resolve creator names for everyone — clients see who uploaded a file too,
+  // for accountability. Cached + rate-limit-safe.
+  {
+    const shown = [...visibleItems, ...archivedFolders];
+    const ids = Array.from(
+      new Set(shown.map((i) => i.creatorId).filter(Boolean) as string[]),
+    );
+    if (ids.length) {
+      const names = await resolveCreatorNames(assembly, ids);
+      for (const it of shown) {
+        if (it.creatorId) it.creatorName = names.get(it.creatorId);
+      }
     }
   }
 

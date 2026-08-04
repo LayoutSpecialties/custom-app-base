@@ -178,7 +178,9 @@ export function FolderList({
   const [historyItem, setHistoryItem] = useState<FileItem | null>(null);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [sortKey, setSortKey] = useState<'name' | 'status' | 'modified'>('name');
+  const [sortKey, setSortKey] = useState<
+    'name' | 'status' | 'modified' | 'creator'
+  >('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [confirmArchive, setConfirmArchive] = useState<FileItem | null>(null);
   const [viewingArchived, setViewingArchived] = useState(false);
@@ -533,7 +535,7 @@ export function FolderList({
     }
   }
 
-  function toggleSort(col: 'name' | 'status' | 'modified') {
+  function toggleSort(col: 'name' | 'status' | 'modified' | 'creator') {
     if (sortKey === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
       setSortKey(col);
@@ -562,6 +564,8 @@ export function FolderList({
       if (sortKey === 'name') r = a.name.localeCompare(b.name);
       else if (sortKey === 'modified')
         r = (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
+      else if (sortKey === 'creator')
+        r = (a.creatorName ?? '').localeCompare(b.creatorName ?? '');
       else {
         r = statusRank(a) - statusRank(b);
         if (r === 0) r = a.name.localeCompare(b.name);
@@ -1006,6 +1010,7 @@ export function FolderList({
               <div ref={nameProbeRef} className="min-w-0 flex-1" />
             </div>
             <div className="w-52 shrink-0" />
+            <div className="w-32 shrink-0" />
             <div className="w-24 shrink-0" />
             <div className="w-8 shrink-0" />
             <div className="w-4 shrink-0" />
@@ -1029,6 +1034,13 @@ export function FolderList({
               className={`${stacked ? 'hidden' : 'block w-52'} shrink-0 text-left hover:text-gray-700`}
             >
               Status{arrow('status')}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSort('creator')}
+              className={`${stacked ? 'hidden' : 'block w-32'} shrink-0 text-left hover:text-gray-700`}
+            >
+              Creator{arrow('creator')}
             </button>
             <button
               type="button"
@@ -1087,6 +1099,11 @@ export function FolderList({
                         className={`${stacked ? 'flex' : 'hidden'} flex-wrap items-center gap-x-3 gap-y-1 mt-1`}
                       >
                         {item.object === 'folder' && statusControl(item, status)}
+                        {item.creatorName && (
+                          <div className="text-xs text-gray-500">
+                            By {item.creatorName}
+                          </div>
+                        )}
                         {item.updatedAt && (
                           <div className="text-xs text-gray-500">
                             Modified {formatDate(item.updatedAt)}
@@ -1098,6 +1115,13 @@ export function FolderList({
 
                   <div className={`${stacked ? 'hidden' : 'block w-52'} shrink-0`}>
                     {item.object === 'folder' && statusControl(item, status)}
+                  </div>
+
+                  <div
+                    className={`${stacked ? 'hidden' : 'block w-32'} shrink-0 text-sm text-gray-500 truncate`}
+                    title={item.creatorName}
+                  >
+                    {item.creatorName}
                   </div>
 
                   <div className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-sm text-gray-500`}>
