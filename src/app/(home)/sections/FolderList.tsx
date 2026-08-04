@@ -1021,34 +1021,74 @@ export function FolderList({
               top: toolbarHeight + (selected.size > 0 ? selectionBarHeight : 0),
             }}
           >
-            <button
-              type="button"
-              onClick={() => toggleSort('name')}
-              className="flex-1 min-w-0 text-left hover:text-gray-700"
-            >
-              Name{arrow('name')}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSort('status')}
-              className={`${stacked ? 'hidden' : 'block w-52'} shrink-0 text-left hover:text-gray-700`}
-            >
-              Status{arrow('status')}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSort('creator')}
-              className={`${stacked ? 'hidden' : 'block w-32'} shrink-0 text-left hover:text-gray-700`}
-            >
-              Creator{arrow('creator')}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSort('modified')}
-              className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-left hover:text-gray-700`}
-            >
-              Modified{arrow('modified')}
-            </button>
+            {stacked ? (
+              // Stacked view has no column headers to click, so offer a sort
+              // dropdown + direction toggle instead.
+              <div className="flex flex-1 min-w-0 items-center gap-2">
+                <span className="shrink-0">Sort</span>
+                <select
+                  aria-label="Sort by"
+                  value={sortKey}
+                  onChange={(e) => {
+                    setSortKey(
+                      e.target.value as
+                        | 'name'
+                        | 'status'
+                        | 'creator'
+                        | 'modified',
+                    );
+                    setSortDir('asc');
+                  }}
+                  className="text-xs font-normal text-gray-700 border border-gray-300 rounded px-1.5 py-1 bg-white"
+                >
+                  <option value="name">Name</option>
+                  <option value="status">Status</option>
+                  <option value="creator">Creator</option>
+                  <option value="modified">Modified</option>
+                </select>
+                <button
+                  type="button"
+                  title="Toggle sort direction"
+                  onClick={() =>
+                    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+                  }
+                  className="text-xs px-2 py-1 border border-gray-300 rounded bg-white text-gray-700"
+                >
+                  {sortDir === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('name')}
+                  className="flex-1 min-w-0 text-left hover:text-gray-700"
+                >
+                  Name{arrow('name')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('status')}
+                  className="block w-52 shrink-0 text-left hover:text-gray-700"
+                >
+                  Status{arrow('status')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('creator')}
+                  className="block w-32 shrink-0 text-left hover:text-gray-700"
+                >
+                  Creator{arrow('creator')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('modified')}
+                  className="block w-24 shrink-0 text-left hover:text-gray-700"
+                >
+                  Modified{arrow('modified')}
+                </button>
+              </>
+            )}
             <div className="w-8 shrink-0" />
             <input
               type="checkbox"
