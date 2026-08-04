@@ -175,6 +175,8 @@ export function FolderList({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [confirmArchive, setConfirmArchive] = useState<FileItem | null>(null);
   const [viewingArchived, setViewingArchived] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pendingNotifyRef = useRef<string[]>([]);
@@ -183,6 +185,7 @@ export function FolderList({
 
   function navigate(path: string) {
     setViewingArchived(false);
+    setSelected(new Set());
     const params = new URLSearchParams(searchParams.toString());
     if (path) params.set('path', path);
     else params.delete('path');
@@ -511,6 +514,76 @@ export function FolderList({
 
   const listItems = sortList(viewingArchived ? archivedFolders : items);
 
+  // ── Multi-select + bulk actions ────────────────────────────────────────────
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  const allSelected =
+    listItems.length > 0 && listItems.every((it) => selected.has(it.id));
+  function toggleSelectAll() {
+    setSelected(allSelected ? new Set() : new Set(listItems.map((i) => i.id)));
+  }
+  const selectedItems = () => listItems.filter((it) => selected.has(it.id));
+
+  async function runBulk(
+    targets: FileItem[],
+    fn: (item: FileItem) => Promise<Response>,
+  ) {
+    if (targets.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const it of targets) {
+        const res = await fn(it);
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || `Failed (${res.status})`);
+        }
+      }
+      setSelected(new Set());
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk action failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function bulkArchive(archived: boolean) {
+    // Only folders (jobs) can be archived; ignore any selected files.
+    runBulk(
+      selectedItems().filter((it) => it.object === 'folder'),
+      (it) =>
+        fetch('/api/folder-archive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, channelId, folderId: it.id, archived }),
+        }),
+    );
+  }
+
+  function bulkDelete() {
+    runBulk(selectedItems(), (it) =>
+      fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          companyId,
+          action: 'delete',
+          fileId: it.id,
+          path: it.path,
+          object: it.object,
+        }),
+      }),
+    );
+  }
+
   const formatDate = (iso?: string) => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -566,7 +639,10 @@ export function FolderList({
           {viewingArchived ? (
             <button
               type="button"
-              onClick={() => setViewingArchived(false)}
+              onClick={() => {
+                setViewingArchived(false);
+                setSelected(new Set());
+              }}
               className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               &larr; Active jobs
@@ -576,7 +652,10 @@ export function FolderList({
               {currentPath === '' && (
                 <button
                   type="button"
-                  onClick={() => setViewingArchived(true)}
+                  onClick={() => {
+                    setViewingArchived(true);
+                    setSelected(new Set());
+                  }}
                   className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Archived
@@ -708,6 +787,49 @@ export function FolderList({
         </div>
       )}
 
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
+          <span className="font-medium text-gray-700">
+            {selected.size} selected
+          </span>
+          {!viewingArchived && currentPath === '' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => bulkArchive(true)}
+              className="px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Archive
+            </button>
+          )}
+          {viewingArchived && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => bulkArchive(false)}
+              className="px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Unarchive
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirmBulkDelete(true)}
+            className="px-3 py-1 rounded-md border border-red-300 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50"
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="ml-auto px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {listItems.length === 0 ? (
         <Body size="base" className="text-gray-500">
           {viewingArchived ? 'No archived jobs.' : 'This folder is empty.'}
@@ -737,6 +859,13 @@ export function FolderList({
               Modified{arrow('modified')}
             </button>
             <div className="w-8 shrink-0" />
+            <input
+              type="checkbox"
+              aria-label="Select all"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 shrink-0 cursor-pointer"
+            />
           </div>
 
           <ul className="divide-y divide-gray-200">
@@ -880,6 +1009,13 @@ export function FolderList({
                     Delete
                   </button>
                 </ItemMenu>
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${item.name}`}
+                  checked={selected.has(item.id)}
+                  onChange={() => toggleSelect(item.id)}
+                  className="w-4 h-4 shrink-0 cursor-pointer"
+                />
                 </li>
               );
             })}
@@ -979,6 +1115,43 @@ export function FolderList({
         </div>
       )}
 
+      {confirmBulkDelete && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setConfirmBulkDelete(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Heading size="lg">Delete {selected.size} item(s)?</Heading>
+            <Body size="sm" className="text-gray-600 mt-2">
+              Any folders and everything inside them will be permanently removed.
+              This cannot be undone.
+            </Body>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmBulkDelete(false)}
+                className="text-sm px-3 py-1 rounded-md text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmBulkDelete(false);
+                  bulkDelete();
+                }}
+                className="text-sm px-3 py-1 rounded-md bg-red-600 text-white disabled:opacity-40"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
