@@ -883,6 +883,7 @@ export function FolderList({
             <span className="font-medium text-gray-700">
               {selected.size} selected
             </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
           {!viewingArchived && currentPath === '' && (
             <button
               type="button"
@@ -914,10 +915,11 @@ export function FolderList({
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="ml-auto px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
+              className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
             >
               Clear
             </button>
+          </div>
           </div>
         )}
       </div>
