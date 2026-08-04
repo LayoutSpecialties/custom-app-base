@@ -821,11 +821,12 @@ export function FolderList({
         </div>
       )}
 
-      {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
-          <span className="font-medium text-gray-700">
-            {selected.size} selected
-          </span>
+      <div className="mb-3 min-h-[44px]">
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-2 rounded-md border border-gray-200 bg-gray-50 text-sm">
+            <span className="font-medium text-gray-700">
+              {selected.size} selected
+            </span>
           {!viewingArchived && currentPath === '' && (
             <button
               type="button"
@@ -854,15 +855,16 @@ export function FolderList({
           >
             Delete
           </button>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="ml-auto px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
-          >
-            Clear
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="ml-auto px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
 
       {listItems.length === 0 ? (
         <Body size="base" className="text-gray-500">
