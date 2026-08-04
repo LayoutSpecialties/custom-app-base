@@ -7,7 +7,7 @@
     "dev:embedded": "ASSEMBLY_ENV=local node scripts/dev.js",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@assembly-js/app-bridge": "^1.1.0",

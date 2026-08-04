@@ -20,7 +20,8 @@ export function GettingStarted() {
           Open in Dev Mode
         </a>
         <p className="text-sm text-gray-500">
-          You'll need to be logged into your Assembly dashboard to use dev mode.
+          You&rsquo;ll need to be logged into your Assembly dashboard to use dev
+          mode.
         </p>
       </div>
     </Container>
