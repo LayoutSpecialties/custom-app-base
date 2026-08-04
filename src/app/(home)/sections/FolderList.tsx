@@ -194,6 +194,9 @@ export function FolderList({
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const selectionBarRef = useRef<HTMLDivElement>(null);
   const [selectionBarHeight, setSelectionBarHeight] = useState(0);
+  const listBoxRef = useRef<HTMLDivElement>(null);
+  const nameProbeRef = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(true);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
 
   // The pinned bars stack from the top: toolbar, then the selection bar (only
@@ -567,6 +570,44 @@ export function FolderList({
     });
 
   const listItems = sortList(viewingArchived ? archivedFolders : items);
+
+  // Stack the columns under the name whenever the widest name wouldn't fully
+  // fit beside them (table mode), so the name is always fully readable. The
+  // hidden probe row gives the name column's table-mode width; each name's
+  // scrollWidth is its full text width even while truncated. One decision for
+  // the whole list, re-measured on resize and once the web font loads.
+  const namesKey = listItems.map((i) => i.name).join(' ');
+  useEffect(() => {
+    const box = listBoxRef.current;
+    const probe = nameProbeRef.current;
+    if (!box || !probe) return;
+    const ctx = document.createElement('canvas').getContext('2d');
+    const measure = () => {
+      const avail = probe.clientWidth; // name column width in table mode
+      if (avail <= 0) {
+        setStacked(true);
+        return;
+      }
+      const names = box.querySelectorAll<HTMLElement>('[data-name]');
+      if (!ctx || names.length === 0) return;
+      // Measure each name's true text width. (scrollWidth can't be used: when
+      // the name box is wider than the text it returns the box width, not the
+      // text width, so it would always report "too wide".)
+      const cs = getComputedStyle(names[0]);
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      let longest = 0;
+      names.forEach((el) => {
+        const w = ctx.measureText(el.textContent ?? '').width;
+        if (w > longest) longest = w;
+      });
+      setStacked(longest > avail - 4);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    document.fonts?.ready.then(measure).catch(() => {});
+    return () => ro.disconnect();
+  }, [namesKey]);
 
   // ── Multi-select + bulk actions ────────────────────────────────────────────
   function toggleSelect(id: string) {
@@ -948,10 +989,27 @@ export function FolderList({
         </Body>
       ) : (
         <div
+          ref={listBoxRef}
           className={`rounded-lg border border-gray-200 transition-opacity ${
             isPending ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
+          {/* Invisible probe, always laid out as a full table row, so we can
+              read the name column's width in table mode regardless of the
+              current stacked/table state. */}
+          <div
+            aria-hidden="true"
+            className="flex items-center gap-3 px-4 h-0 overflow-hidden invisible"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="w-5 shrink-0" />
+              <div ref={nameProbeRef} className="min-w-0 flex-1" />
+            </div>
+            <div className="w-52 shrink-0" />
+            <div className="w-24 shrink-0" />
+            <div className="w-8 shrink-0" />
+            <div className="w-4 shrink-0" />
+          </div>
           <div
             className="sticky z-10 flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 rounded-t-lg"
             style={{
@@ -968,14 +1026,14 @@ export function FolderList({
             <button
               type="button"
               onClick={() => toggleSort('status')}
-              className="hidden lg:block lg:w-52 shrink-0 text-left hover:text-gray-700"
+              className={`${stacked ? 'hidden' : 'block w-52'} shrink-0 text-left hover:text-gray-700`}
             >
               Status{arrow('status')}
             </button>
             <button
               type="button"
               onClick={() => toggleSort('modified')}
-              className="w-24 shrink-0 text-left hover:text-gray-700 hidden lg:block"
+              className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-left hover:text-gray-700`}
             >
               Modified{arrow('modified')}
             </button>
@@ -1004,6 +1062,7 @@ export function FolderList({
                       {item.object === 'folder' ? (
                         <button
                           type="button"
+                          data-name
                           onClick={() => navigate(item.path)}
                           onMouseEnter={() => schedulePrefetch(item.path)}
                           onMouseLeave={cancelPrefetch}
@@ -1012,14 +1071,17 @@ export function FolderList({
                           {item.name}
                         </button>
                       ) : (
-                        <span className="block w-full font-medium text-gray-900 truncate">
+                        <span
+                          data-name
+                          className="block w-full font-medium text-gray-900 truncate"
+                        >
                           {item.name}
                         </span>
                       )}
-                      {/* Below lg, the Status and Modified columns stack under
-                          the name so it's never squeezed and all data stays
-                          visible without a horizontal scroll. */}
-                      <div className="lg:hidden mt-1 space-y-1">
+                      {/* When the widest name won't fit beside the columns, the
+                          Status and Modified columns stack under the name so it
+                          stays fully readable (no horizontal scroll). */}
+                      <div className={`${stacked ? 'block' : 'hidden'} mt-1 space-y-1`}>
                         {item.object === 'folder' && statusControl(item, status)}
                         {item.updatedAt && (
                           <div className="text-xs text-gray-500">
@@ -1030,11 +1092,11 @@ export function FolderList({
                     </div>
                   </div>
 
-                  <div className="hidden lg:block lg:w-52 shrink-0">
+                  <div className={`${stacked ? 'hidden' : 'block w-52'} shrink-0`}>
                     {item.object === 'folder' && statusControl(item, status)}
                   </div>
 
-                  <div className="w-24 shrink-0 hidden lg:block text-sm text-gray-500">
+                  <div className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-sm text-gray-500`}>
                     {formatDate(item.updatedAt)}
                   </div>
 
