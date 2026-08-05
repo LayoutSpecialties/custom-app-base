@@ -86,7 +86,7 @@ export async function POST(request: Request) {
             { status: 500 },
           );
         await recordCreator(res.id);
-        return Response.json({ uploadUrl });
+        return Response.json({ uploadUrl, id: res.id });
       }
 
       case 'ensureFolders': {

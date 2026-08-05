@@ -11,7 +11,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Body, Heading } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
 import type { StatusDef } from '@/utils/status';
-import { UNSET_COLOR } from '@/utils/status';
+import { SURVEY_FOLDER, UNSET_COLOR } from '@/utils/status';
 
 function FolderIcon() {
   return (
@@ -201,6 +201,7 @@ export function FolderList({
   const listBoxRef = useRef<HTMLDivElement>(null);
   const nameProbeRef = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(true);
+  const [surveyPrompt, setSurveyPrompt] = useState<string[] | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
 
@@ -351,6 +352,7 @@ export function FolderList({
       }
 
       // 2) create each pending file and PUT its bytes to storage
+      const surveyIds: string[] = [];
       for (const { file, relPath } of uploads) {
         const parts = relPath.split('/');
         const name = parts.pop() as string;
@@ -370,10 +372,13 @@ export function FolderList({
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error || `Upload failed (${res.status})`);
         }
-        const { uploadUrl } = await res.json();
+        const { uploadUrl, id } = await res.json();
         const put = await fetch(uploadUrl, { method: 'PUT', body: file });
         if (!put.ok)
           throw new Error(`Upload of "${name}" failed (${put.status})`);
+        const fullPath = [currentPath, relPath].filter(Boolean).join('/');
+        if (id && fullPath.split('/').includes(SURVEY_FOLDER))
+          surveyIds.push(id);
       }
       // Notify the internal team when a client uploads (batched; see queue).
       if (!isInternal) {
@@ -383,6 +388,9 @@ export function FolderList({
           ),
         );
       }
+      // Prompt the client to categorise files they just put in a survey folder.
+      if (!isInternal && surveyIds.length > 0 && clientCategories.length > 0)
+        setSurveyPrompt(surveyIds);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
@@ -557,6 +565,33 @@ export function FolderList({
       setError(e instanceof Error ? e.message : 'Failed to set category');
     } finally {
       setPendingId(null);
+    }
+  }
+
+  // Apply the chosen category to every file the client just uploaded into a
+  // survey folder (from the post-upload prompt).
+  async function applyClientCategory(statusId: string) {
+    const ids = surveyPrompt ?? [];
+    setBusy(true);
+    setError(null);
+    try {
+      for (const fileId of ids) {
+        const res = await fetch('/api/file-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, fileId, statusId }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || `Failed (${res.status})`);
+        }
+      }
+      setSurveyPrompt(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to set category');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1460,6 +1495,36 @@ export function FolderList({
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {surveyPrompt && surveyPrompt.length > 0 && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+            <Heading size="lg">Let us know how soon you need this</Heading>
+            <Body size="sm" className="text-gray-600 mt-2">
+              Choose how urgently you need{' '}
+              {surveyPrompt.length === 1
+                ? 'this file'
+                : `these ${surveyPrompt.length} files`}
+              .
+            </Body>
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+            <div className="mt-4 flex flex-col gap-2">
+              {clientCategories.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => applyClientCategory(c.id)}
+                  className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <StatusDot color={c.color} />
+                  <span className="text-sm text-gray-800">{c.label}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
