@@ -21,6 +21,7 @@ function escapeHtml(s: string): string {
 export async function sendUploadNotification(opts: {
   companyName?: string;
   fileNames: string[];
+  category?: string; // client-chosen urgency for survey uploads
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const to = process.env.NOTIFY_TO;
@@ -32,9 +33,17 @@ export async function sendUploadNotification(opts: {
   const list = opts.fileNames
     .map((n) => `<li>${escapeHtml(n)}</li>`)
     .join('');
-  const subject = `New file upload${opts.companyName ? ` from ${opts.companyName}` : ''}`;
+  // The chosen urgency, made prominent on its own line.
+  const categoryBlock = opts.category
+    ? `<p style="margin:16px 0 4px;">How soon they need it:</p>` +
+      `<p style="font-size:20px;font-weight:700;margin:0 0 16px;">${escapeHtml(opts.category)}</p>`
+    : '';
+  const subject =
+    `New file upload${opts.companyName ? ` from ${opts.companyName}` : ''}` +
+    (opts.category ? ` — ${opts.category}` : '');
   const html =
     `<p>${who} uploaded ${count} file${count === 1 ? '' : 's'} in the client portal:</p>` +
+    categoryBlock +
     `<ul>${list}</ul>`;
 
   try {

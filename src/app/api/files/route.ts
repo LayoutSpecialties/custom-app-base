@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     name?: string; // new folder/file name
     paths?: string[]; // folder paths to ensure (for ensureFolders)
     fileNames?: string[]; // uploaded file names (for notifyUpload)
+    category?: string; // client-chosen urgency (for notifyUpload of survey files)
     fileId?: string; // item id (for delete)
     object?: 'folder' | 'file' | 'link';
   };
@@ -159,7 +160,11 @@ export async function POST(request: Request) {
         const fileNames = Array.isArray(body.fileNames)
           ? body.fileNames.slice(0, 50).map(String)
           : [];
-        await sendUploadNotification({ companyName, fileNames });
+        await sendUploadNotification({
+          companyName,
+          fileNames,
+          category: typeof body.category === 'string' ? body.category : undefined,
+        });
         return Response.json({ ok: true });
       }
 

@@ -201,7 +201,9 @@ export function FolderList({
   const listBoxRef = useRef<HTMLDivElement>(null);
   const nameProbeRef = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(true);
-  const [surveyPrompt, setSurveyPrompt] = useState<string[] | null>(null);
+  const [surveyPrompt, setSurveyPrompt] = useState<
+    { id: string; path: string }[] | null
+  >(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
 
@@ -352,7 +354,8 @@ export function FolderList({
       }
 
       // 2) create each pending file and PUT its bytes to storage
-      const surveyIds: string[] = [];
+      const surveyUploads: { id: string; path: string }[] = [];
+      const otherPaths: string[] = [];
       for (const { file, relPath } of uploads) {
         const parts = relPath.split('/');
         const name = parts.pop() as string;
@@ -378,19 +381,17 @@ export function FolderList({
           throw new Error(`Upload of "${name}" failed (${put.status})`);
         const fullPath = [currentPath, relPath].filter(Boolean).join('/');
         if (id && fullPath.split('/').includes(SURVEY_FOLDER))
-          surveyIds.push(id);
+          surveyUploads.push({ id, path: fullPath });
+        else otherPaths.push(fullPath);
       }
-      // Notify the internal team when a client uploads (batched; see queue).
-      if (!isInternal) {
-        queueNotification(
-          uploads.map((u) =>
-            [currentPath, u.relPath].filter(Boolean).join('/'),
-          ),
-        );
+      // Notify the team about non-survey uploads right away (batched). Survey
+      // uploads are notified when the client picks a category (see the prompt),
+      // so that email can include the chosen urgency.
+      if (!isInternal && otherPaths.length > 0) queueNotification(otherPaths);
+      if (!isInternal && surveyUploads.length > 0) {
+        if (clientCategories.length > 0) setSurveyPrompt(surveyUploads);
+        else queueNotification(surveyUploads.map((u) => u.path));
       }
-      // Prompt the client to categorise files they just put in a survey folder.
-      if (!isInternal && surveyIds.length > 0 && clientCategories.length > 0)
-        setSurveyPrompt(surveyIds);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
@@ -569,22 +570,37 @@ export function FolderList({
   }
 
   // Apply the chosen category to every file the client just uploaded into a
-  // survey folder (from the post-upload prompt).
-  async function applyClientCategory(statusId: string) {
-    const ids = surveyPrompt ?? [];
+  // survey folder (from the post-upload prompt), then notify the team with it.
+  async function applyClientCategory(statusId: string, label: string) {
+    const files = surveyPrompt ?? [];
     setBusy(true);
     setError(null);
     try {
-      for (const fileId of ids) {
+      for (const f of files) {
         const res = await fetch('/api/file-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, fileId, statusId }),
+          body: JSON.stringify({ token, fileId: f.id, statusId }),
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error || `Failed (${res.status})`);
         }
+      }
+      // Email the team about these survey uploads, including the urgency.
+      const paths = files.map((f) => f.path);
+      if (paths.length > 0) {
+        await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            companyId,
+            action: 'notifyUpload',
+            fileNames: paths,
+            category: label,
+          }),
+        }).catch(() => {});
       }
       setSurveyPrompt(null);
       router.refresh();
@@ -1518,7 +1534,7 @@ export function FolderList({
                   key={c.id}
                   type="button"
                   disabled={busy}
-                  onClick={() => applyClientCategory(c.id)}
+                  onClick={() => applyClientCategory(c.id, c.label)}
                   className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                 >
                   <StatusDot color={c.color} />
