@@ -11,14 +11,3 @@
 body {
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
-
-/* Don't let the page's own scrollbar reserve width, so the embedded app uses
-   the full width it's given (the dashboard renders a classic scrollbar that
-   otherwise narrows the view; the client portal uses an overlay one). Scrolling
-   still works — only the root bar is hidden, not scrollbars inside components. */
-html {
-  scrollbar-width: none; /* Firefox */
-}
-html::-webkit-scrollbar {
-  display: none; /* Chromium / WebKit */
-}
