@@ -1,5 +1,6 @@
 import { assemblyClient } from '@/utils/assembly';
-import { listAllFiles } from '@/utils/files';
+import { listAllFiles, resolveCreatorName } from '@/utils/files';
+import { setFileCreator } from '@/utils/db';
 import { sendUploadNotification } from '@/utils/email';
 import { withRateLimitRetry } from '@/utils/retry';
 
@@ -43,6 +44,24 @@ export async function POST(request: Request) {
   if (!channelId)
     return Response.json({ error: 'No file channel' }, { status: 400 });
 
+  // Resolve the acting user's display name once (cached across requests), so we
+  // can record who really created each file/folder — Assembly can't tell us,
+  // since our writes use the workspace key. Best-effort; never fails a create.
+  const actingUserId = payload?.internalUserId ?? payload?.clientId;
+  let creatorNamePromise: Promise<string> | null = null;
+  const creatorName = () =>
+    (creatorNamePromise ??= actingUserId
+      ? resolveCreatorName(assembly, actingUserId)
+      : Promise.resolve('Unknown'));
+  const recordCreator = async (fileId?: string) => {
+    if (!fileId) return;
+    try {
+      await setFileCreator(channelId, fileId, await creatorName());
+    } catch {
+      /* creator tracking is best-effort */
+    }
+  };
+
   try {
     switch (body.action) {
       case 'upload': {
@@ -66,6 +85,7 @@ export async function POST(request: Request) {
             { error: 'No upload URL returned' },
             { status: 500 },
           );
+        await recordCreator(res.id);
         return Response.json({ uploadUrl });
       }
 
@@ -79,7 +99,7 @@ export async function POST(request: Request) {
         for (const p of body.paths ?? []) {
           if (!p) continue;
           try {
-            await withRateLimitRetry(
+            const created = await withRateLimitRetry(
               () =>
                 assembly.createFile({
                   fileType: 'folder',
@@ -88,6 +108,7 @@ export async function POST(request: Request) {
               4,
               400,
             );
+            await recordCreator(created.id);
           } catch {
             /* folder likely already exists */
           }
@@ -153,12 +174,13 @@ export async function POST(request: Request) {
           );
         const parent = body.path ?? '';
         const fullPath = parent ? `${parent}/${name}` : name;
-        await withRateLimitRetry(() =>
+        const created = await withRateLimitRetry(() =>
           assembly.createFile({
             fileType: 'folder',
             requestBody: { path: fullPath, channelId },
           }),
         );
+        await recordCreator(created.id);
         return Response.json({ ok: true });
       }
 

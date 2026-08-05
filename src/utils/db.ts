@@ -59,6 +59,13 @@ async function ready() {
       archived_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (channel_id, folder_id)
     )`;
+    await sql`CREATE TABLE IF NOT EXISTS file_creator (
+      channel_id   text NOT NULL,
+      file_id      text NOT NULL,
+      creator_name text,
+      created_at   timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (channel_id, file_id)
+    )`;
     const existing = (await sql`SELECT count(*)::int AS n FROM statuses`) as {
       n: number;
     }[];
@@ -170,6 +177,36 @@ export async function setArchived(
     await sql`DELETE FROM folder_archive
               WHERE channel_id = ${channelId} AND folder_id = ${folderId}`;
   }
+}
+
+// Who created a file/folder through our app. We record this ourselves because
+// our API calls use the workspace key, so Assembly credits the workspace (not
+// the person). file_id -> creator display name for a channel.
+export async function getFileCreatorMap(
+  channelId: string,
+): Promise<Map<string, string>> {
+  const sql = await ready();
+  const map = new Map<string, string>();
+  if (!sql) return map;
+  const rows = (await sql`SELECT file_id, creator_name FROM file_creator
+                          WHERE channel_id = ${channelId} AND creator_name IS NOT NULL`) as {
+    file_id: string;
+    creator_name: string;
+  }[];
+  for (const r of rows) map.set(r.file_id, r.creator_name);
+  return map;
+}
+
+export async function setFileCreator(
+  channelId: string,
+  fileId: string,
+  creatorName: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) return; // best-effort; never fail a create over creator tracking
+  await sql`INSERT INTO file_creator (channel_id, file_id, creator_name)
+            VALUES (${channelId}, ${fileId}, ${creatorName})
+            ON CONFLICT (channel_id, file_id) DO NOTHING`;
 }
 
 export interface HistoryRow {

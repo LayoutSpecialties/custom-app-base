@@ -1,5 +1,10 @@
 import { assemblyClient } from '@/utils/assembly';
-import { getArchivedSet, getFolderStatusMap, listStatuses } from '@/utils/db';
+import {
+  getArchivedSet,
+  getFileCreatorMap,
+  getFolderStatusMap,
+  listStatuses,
+} from '@/utils/db';
 import { withRateLimitRetry } from '@/utils/retry';
 import type { StatusDef } from '@/utils/status';
 
@@ -64,7 +69,7 @@ export interface RawFile {
 const creatorCache = new Map<string, { at: number; name: string }>();
 const CREATOR_TTL_MS = 5 * 60_000;
 
-async function resolveCreatorName(
+export async function resolveCreatorName(
   assembly: AssemblySdk,
   id: string,
 ): Promise<string> {
@@ -218,10 +223,11 @@ export async function getFolderView(
   // Fetch the file list, the status map, and the archived set in parallel.
   // Scope the file list to the current folder's subtree when drilling in (root
   // needs the whole channel to list top-level jobs + compute archived).
-  const [files, statusMap, archivedSet] = await Promise.all([
+  const [files, statusMap, archivedSet, recordedCreators] = await Promise.all([
     listAllFiles(assembly, channelId, currentPath || undefined),
     getFolderStatusMap(channelId),
     getArchivedSet(channelId),
+    getFileCreatorMap(channelId),
   ]);
   const prefix = currentPath ? `${currentPath}/` : '';
 
@@ -284,16 +290,28 @@ export async function getFolderView(
   }
 
   // Resolve creator names for everyone — clients see who uploaded a file too,
-  // for accountability. Cached + rate-limit-safe.
+  // for accountability. Prefer the creator we recorded ourselves (the real
+  // person who created it through the app); fall back to Assembly's creatorId
+  // (the workspace for app-created files, or the real user for ones made in the
+  // Assembly dashboard). Fallback is cached + rate-limit-safe.
   {
     const shown = [...visibleItems, ...archivedFolders];
+    for (const it of shown) {
+      const mine = recordedCreators.get(it.id);
+      if (mine) it.creatorName = mine;
+    }
     const ids = Array.from(
-      new Set(shown.map((i) => i.creatorId).filter(Boolean) as string[]),
+      new Set(
+        shown
+          .filter((i) => !i.creatorName && i.creatorId)
+          .map((i) => i.creatorId) as string[],
+      ),
     );
     if (ids.length) {
       const names = await resolveCreatorNames(assembly, ids);
       for (const it of shown) {
-        if (it.creatorId) it.creatorName = names.get(it.creatorId);
+        if (!it.creatorName && it.creatorId)
+          it.creatorName = names.get(it.creatorId);
       }
     }
   }
