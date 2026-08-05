@@ -17,15 +17,20 @@ async function postStatus(body: Record<string, unknown>): Promise<void> {
   }
 }
 
-export function ManageStatuses({
+function StatusSection({
+  title,
+  description,
+  kind,
   statuses,
   token,
 }: {
+  title: string;
+  description: string;
+  kind: 'internal' | 'client';
   statuses: StatusDef[];
   token?: string;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -52,6 +57,66 @@ export function ManageStatuses({
   }
 
   return (
+    <div>
+      <div className="mb-2">
+        <Heading size="lg">{title}</Heading>
+        <Body size="sm" className="text-gray-500 mt-1">
+          {description}
+        </Body>
+      </div>
+
+      {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+
+      <div className="divide-y divide-gray-100">
+        {statuses.map((s, i) => (
+          <EditRow
+            key={s.id}
+            status={s}
+            busy={busy}
+            canMoveUp={i > 0}
+            canMoveDown={i < statuses.length - 1}
+            onSave={(label, color) =>
+              run(() =>
+                postStatus({
+                  token,
+                  action: 'update',
+                  id: s.id,
+                  label,
+                  color,
+                }),
+              )
+            }
+            onDelete={() =>
+              run(() => postStatus({ token, action: 'delete', id: s.id }))
+            }
+            onMoveUp={() => move(s.id, 'up')}
+            onMoveDown={() => move(s.id, 'down')}
+          />
+        ))}
+      </div>
+
+      <AddRow
+        busy={busy}
+        onAdd={(label, color) =>
+          run(() => postStatus({ token, action: 'create', kind, label, color }))
+        }
+      />
+    </div>
+  );
+}
+
+export function ManageStatuses({
+  statuses,
+  clientCategories,
+  token,
+}: {
+  statuses: StatusDef[];
+  clientCategories: StatusDef[];
+  token?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
     <div className="relative shrink-0">
       <button
         type="button"
@@ -68,50 +133,20 @@ export function ManageStatuses({
             aria-hidden="true"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
-            <div className="mb-2">
-              <Heading size="lg">Manage statuses</Heading>
-              <Body size="sm" className="text-gray-500 mt-1">
-                Rename, recolor, reorder, add, or remove the statuses your team
-                can assign to folders.
-              </Body>
-            </div>
-
-            {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
-
-            <div className="divide-y divide-gray-100">
-              {statuses.map((s, i) => (
-                <EditRow
-                  key={s.id}
-                  status={s}
-                  busy={busy}
-                  canMoveUp={i > 0}
-                  canMoveDown={i < statuses.length - 1}
-                  onSave={(label, color) =>
-                    run(() =>
-                      postStatus({
-                        token,
-                        action: 'update',
-                        id: s.id,
-                        label,
-                        color,
-                      }),
-                    )
-                  }
-                  onDelete={() =>
-                    run(() => postStatus({ token, action: 'delete', id: s.id }))
-                  }
-                  onMoveUp={() => move(s.id, 'up')}
-                  onMoveDown={() => move(s.id, 'down')}
-                />
-              ))}
-            </div>
-
-            <AddRow
-              busy={busy}
-              onAdd={(label, color) =>
-                run(() => postStatus({ token, action: 'create', label, color }))
-              }
+          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] max-h-[80vh] overflow-auto z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-6">
+            <StatusSection
+              title="Statuses"
+              description="Rename, recolor, reorder, add, or remove the statuses your team can assign to folders."
+              kind="internal"
+              statuses={statuses}
+              token={token}
+            />
+            <StatusSection
+              title="Client categories"
+              description="Levels a client can set on files they upload into a job's 00_Surveys folder — to tell you how soon they need it."
+              kind="client"
+              statuses={clientCategories}
+              token={token}
             />
           </div>
         </>

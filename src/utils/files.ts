@@ -1,12 +1,13 @@
 import { assemblyClient } from '@/utils/assembly';
 import {
   getArchivedSet,
+  getFileClientStatusMap,
   getFileCreatorMap,
   getFolderStatusMap,
   listStatuses,
 } from '@/utils/db';
 import { withRateLimitRetry } from '@/utils/retry';
-import type { StatusDef } from '@/utils/status';
+import { SURVEY_FOLDER, type StatusDef } from '@/utils/status';
 
 export interface FileItem {
   id: string;
@@ -18,6 +19,8 @@ export interface FileItem {
   updatedAt?: string;
   creatorId?: string;
   creatorName?: string; // resolved display name (all viewers)
+  isSurveyFile?: boolean; // a file inside a job's 00_Surveys folder
+  clientStatusId?: string | null; // client-set category (survey files only)
 }
 
 export interface Crumb {
@@ -37,6 +40,7 @@ export interface FolderView {
   companies?: CompanyOption[]; // internal picker options (undefined for clients)
   channelId?: string;
   statuses: StatusDef[];
+  clientCategories: StatusDef[]; // client-set categories for survey files
   currentPath: string;
   breadcrumb: Crumb[];
   items: FileItem[];
@@ -153,9 +157,13 @@ export async function getFolderView(
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 
-  const statuses = await listStatuses();
+  const [statuses, clientCategories] = await Promise.all([
+    listStatuses('internal'),
+    listStatuses('client'),
+  ]);
   const empty = {
     statuses,
+    clientCategories,
     currentPath: '',
     breadcrumb: [],
     items: [],
@@ -223,12 +231,14 @@ export async function getFolderView(
   // Fetch the file list, the status map, and the archived set in parallel.
   // Scope the file list to the current folder's subtree when drilling in (root
   // needs the whole channel to list top-level jobs + compute archived).
-  const [files, statusMap, archivedSet, recordedCreators] = await Promise.all([
-    listAllFiles(assembly, channelId, currentPath || undefined),
-    getFolderStatusMap(channelId),
-    getArchivedSet(channelId),
-    getFileCreatorMap(channelId),
-  ]);
+  const [files, statusMap, archivedSet, recordedCreators, clientStatusMap] =
+    await Promise.all([
+      listAllFiles(assembly, channelId, currentPath || undefined),
+      getFolderStatusMap(channelId),
+      getArchivedSet(channelId),
+      getFileCreatorMap(channelId),
+      getFileClientStatusMap(channelId),
+    ]);
   const prefix = currentPath ? `${currentPath}/` : '';
 
   // A folder's "Modified" should reflect the newest change anywhere inside it.
@@ -255,6 +265,10 @@ export async function getFolderView(
       const object: FileItem['object'] =
         f.object === 'folder' || f.object === 'link' ? f.object : 'file';
       const id = f.id ?? (f.path as string);
+      // A survey file is a file inside a job's 00_Surveys folder.
+      const isSurveyFile =
+        object === 'file' &&
+        (f.path as string).split('/').includes(SURVEY_FOLDER);
       return {
         id,
         name: rel,
@@ -268,6 +282,8 @@ export async function getFolderView(
             ? (folderNewest.get(rel) ?? f.updatedAt)
             : f.updatedAt,
         creatorId: f.creatorId,
+        isSurveyFile,
+        clientStatusId: isSurveyFile ? (clientStatusMap[id] ?? null) : undefined,
       };
     })
     .sort((a, b) => {
@@ -331,6 +347,7 @@ export async function getFolderView(
     companies,
     channelId,
     statuses,
+    clientCategories,
     currentPath,
     breadcrumb,
     items: visibleItems,

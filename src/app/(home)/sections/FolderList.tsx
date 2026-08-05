@@ -148,6 +148,7 @@ export function FolderList({
   archivedFolders,
   currentPath,
   statuses,
+  clientCategories,
   isInternal,
   channelId,
   companyId,
@@ -158,6 +159,7 @@ export function FolderList({
   archivedFolders: FileItem[];
   currentPath: string;
   statuses: StatusDef[];
+  clientCategories: StatusDef[];
   isInternal: boolean;
   channelId?: string;
   companyId?: string;
@@ -200,6 +202,7 @@ export function FolderList({
   const nameProbeRef = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(true);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
+  const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
 
   // The pinned bars stack from the top: toolbar, then the selection bar (only
   // while items are selected), then the column header. Each one pins just below
@@ -535,6 +538,28 @@ export function FolderList({
     }
   }
 
+  // Client-set category on a survey file (clients only; server enforces it).
+  async function changeClientStatus(fileId: string, statusId: string) {
+    setPendingId(fileId);
+    setError(null);
+    try {
+      const res = await fetch('/api/file-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, fileId, statusId: statusId || null }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `Failed (${res.status})`);
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to set category');
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   function toggleSort(col: 'name' | 'status' | 'modified' | 'creator') {
     if (sortKey === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
@@ -734,6 +759,45 @@ export function FolderList({
     ) : (
       <StatusBadge status={status} />
     );
+  }
+
+  // The client category on a survey file: editable by the client, read-only for
+  // internal viewers (the mirror of statusControl).
+  function clientStatusControl(item: FileItem, fullWidth = false) {
+    const cat = item.clientStatusId
+      ? clientStatusById.get(item.clientStatusId)
+      : undefined;
+    return !isInternal ? (
+      <div className={`flex items-center gap-2 min-w-0 ${fullWidth ? 'w-full' : ''}`}>
+        <StatusDot color={cat?.color ?? UNSET_COLOR} />
+        <select
+          className={`text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0 ${fullWidth ? 'w-full' : ''}`}
+          value={item.clientStatusId ?? ''}
+          disabled={pendingId === item.id}
+          onChange={(e) => changeClientStatus(item.id, e.target.value)}
+        >
+          <option value="">No category</option>
+          {clientCategories.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 text-sm text-gray-700 shrink-0">
+        <StatusDot color={cat?.color ?? UNSET_COLOR} />
+        {cat?.label ?? 'No category'}
+      </span>
+    );
+  }
+
+  // What goes in the Status column for a row: a folder's internal status, or a
+  // survey file's client category, or nothing.
+  function statusSlot(item: FileItem, status?: StatusDef, fullWidth = false) {
+    if (item.object === 'folder') return statusControl(item, status, fullWidth);
+    if (item.isSurveyFile) return clientStatusControl(item, fullWidth);
+    return null;
   }
 
   return (
@@ -1140,8 +1204,7 @@ export function FolderList({
                       <div
                         className={`${stacked ? 'flex' : 'hidden'} flex-wrap items-center gap-x-3 gap-y-1 mt-1`}
                       >
-                        {item.object === 'folder' &&
-                          statusControl(item, status, true)}
+                        {statusSlot(item, status, true)}
                         {item.creatorName && (
                           <div className="text-xs text-gray-500">
                             By {item.creatorName}
@@ -1157,7 +1220,7 @@ export function FolderList({
                   </div>
 
                   <div className={`${stacked ? 'hidden' : 'block w-52'} shrink-0`}>
-                    {item.object === 'folder' && statusControl(item, status)}
+                    {statusSlot(item, status)}
                   </div>
 
                   <div

@@ -1,5 +1,14 @@
 import { neon } from '@neondatabase/serverless';
-import { DEFAULT_STATUSES, toStatusId, type StatusDef } from '@/utils/status';
+import {
+  DEFAULT_CLIENT_CATEGORIES,
+  DEFAULT_STATUSES,
+  toStatusId,
+  type StatusDef,
+} from '@/utils/status';
+
+// Status lists: 'internal' = the workflow statuses your team sets on folders;
+// 'client' = the urgency categories clients set on survey files.
+export type StatusKind = 'internal' | 'client';
 
 // Lazily resolve a SQL client. Returns null when no connection string is set,
 // so the app degrades gracefully (folders still list; statuses are just empty)
@@ -66,26 +75,46 @@ async function ready() {
       created_at   timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (channel_id, file_id)
     )`;
-    const existing = (await sql`SELECT count(*)::int AS n FROM statuses`) as {
-      n: number;
-    }[];
-    if ((existing[0]?.n ?? 0) === 0) {
-      for (const s of DEFAULT_STATUSES) {
-        await sql`INSERT INTO statuses (id, label, color, sort_order)
-                  VALUES (${toStatusId(s.label)}, ${s.label}, ${s.color}, ${s.sortOrder})
+    // Distinguish internal statuses from client categories in the same table.
+    await sql`ALTER TABLE statuses
+              ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'internal'`;
+    // A client's chosen category for a survey file.
+    await sql`CREATE TABLE IF NOT EXISTS file_client_status (
+      channel_id text NOT NULL,
+      file_id    text NOT NULL,
+      status_id  text,
+      updated_by text,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (channel_id, file_id)
+    )`;
+    const seed = async (kind: StatusKind, defs: Omit<StatusDef, 'id'>[]) => {
+      const n = (
+        (await sql`SELECT count(*)::int AS n FROM statuses WHERE kind = ${kind}`) as {
+          n: number;
+        }[]
+      )[0]?.n;
+      if ((n ?? 0) > 0) return;
+      for (const s of defs) {
+        await sql`INSERT INTO statuses (id, label, color, sort_order, kind)
+                  VALUES (${toStatusId(s.label)}, ${s.label}, ${s.color}, ${s.sortOrder}, ${kind})
                   ON CONFLICT (id) DO NOTHING`;
       }
-    }
+    };
+    await seed('internal', DEFAULT_STATUSES);
+    await seed('client', DEFAULT_CLIENT_CATEGORIES);
     schemaReady = true;
   }
   return sql;
 }
 
-export async function listStatuses(): Promise<StatusDef[]> {
+export async function listStatuses(
+  kind: StatusKind = 'internal',
+): Promise<StatusDef[]> {
   const sql = await ready();
   if (!sql) return [];
   const rows = (await sql`SELECT id, label, color, sort_order
-                          FROM statuses ORDER BY sort_order, label`) as {
+                          FROM statuses WHERE kind = ${kind}
+                          ORDER BY sort_order, label`) as {
     id: string;
     label: string;
     color: string;
@@ -209,6 +238,38 @@ export async function setFileCreator(
             ON CONFLICT (channel_id, file_id) DO NOTHING`;
 }
 
+// A client's chosen category for a survey file. file_id -> status_id.
+export async function getFileClientStatusMap(
+  channelId: string,
+): Promise<Record<string, string>> {
+  const sql = await ready();
+  if (!sql) return {};
+  const rows = (await sql`SELECT file_id, status_id FROM file_client_status
+                          WHERE channel_id = ${channelId} AND status_id IS NOT NULL`) as {
+    file_id: string;
+    status_id: string;
+  }[];
+  const map: Record<string, string> = {};
+  for (const r of rows) map[r.file_id] = r.status_id;
+  return map;
+}
+
+export async function setFileClientStatus(
+  channelId: string,
+  fileId: string,
+  statusId: string | null,
+  updatedBy?: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  await sql`INSERT INTO file_client_status (channel_id, file_id, status_id, updated_by, updated_at)
+            VALUES (${channelId}, ${fileId}, ${statusId}, ${updatedBy ?? null}, now())
+            ON CONFLICT (channel_id, file_id)
+            DO UPDATE SET status_id = EXCLUDED.status_id,
+                          updated_by = EXCLUDED.updated_by,
+                          updated_at = now()`;
+}
+
 export interface HistoryRow {
   statusLabel: string;
   statusColor: string | null;
@@ -241,11 +302,15 @@ export async function getFolderHistory(
 
 // ── Status category management (internal only; callers enforce the role) ──────
 
-export async function createStatus(label: string, color: string): Promise<void> {
+export async function createStatus(
+  label: string,
+  color: string,
+  kind: StatusKind = 'internal',
+): Promise<void> {
   const sql = await ready();
   if (!sql) throw new Error('Database not configured');
 
-  // Derive a unique id from the label.
+  // Derive a unique id from the label (ids are unique across both lists).
   const base = toStatusId(label);
   const existing = (await sql`SELECT id FROM statuses WHERE id = ${base} OR id LIKE ${base + '_%'}`) as {
     id: string;
@@ -255,13 +320,14 @@ export async function createStatus(label: string, color: string): Promise<void> 
   let n = 2;
   while (taken.has(id)) id = `${base}_${n++}`;
 
-  const maxRow = (await sql`SELECT COALESCE(MAX(sort_order), -1) AS m FROM statuses`) as {
+  const maxRow = (await sql`SELECT COALESCE(MAX(sort_order), -1) AS m
+                            FROM statuses WHERE kind = ${kind}`) as {
     m: number;
   }[];
   const sortOrder = (maxRow[0]?.m ?? -1) + 1;
 
-  await sql`INSERT INTO statuses (id, label, color, sort_order)
-            VALUES (${id}, ${label}, ${color}, ${sortOrder})`;
+  await sql`INSERT INTO statuses (id, label, color, sort_order, kind)
+            VALUES (${id}, ${label}, ${color}, ${sortOrder}, ${kind})`;
 }
 
 export async function updateStatus(
@@ -278,8 +344,9 @@ export async function updateStatus(
 export async function deleteStatus(id: string): Promise<void> {
   const sql = await ready();
   if (!sql) throw new Error('Database not configured');
-  // Any folders using this status fall back to "No status".
+  // Any folders/files using this status fall back to "No status".
   await sql`UPDATE folder_status SET status_id = NULL WHERE status_id = ${id}`;
+  await sql`UPDATE file_client_status SET status_id = NULL WHERE status_id = ${id}`;
   await sql`DELETE FROM statuses WHERE id = ${id}`;
 }
 

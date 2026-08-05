@@ -48,7 +48,11 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
                 />
               )}
             </div>
-            <ManageStatuses statuses={view.statuses} token={token} />
+            <ManageStatuses
+              statuses={view.statuses}
+              clientCategories={view.clientCategories}
+              token={token}
+            />
           </div>
         )}
         <FolderList
@@ -57,6 +61,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
           archivedFolders={view.archivedFolders}
           currentPath={view.currentPath}
           statuses={view.statuses}
+          clientCategories={view.clientCategories}
           isInternal={view.isInternal}
           channelId={view.channelId}
           companyId={view.companyId}

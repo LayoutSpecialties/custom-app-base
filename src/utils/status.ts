@@ -16,6 +16,19 @@ export const DEFAULT_STATUSES: Omit<StatusDef, 'id'>[] = [
   { label: 'Complete', color: '#22C55E', sortOrder: 3 }, // green
 ];
 
+// Client-set urgency categories, shown on files in a job's 00_Surveys folder.
+// A separate managed list (kind='client'); seeded on a fresh DB, editable by
+// internal users under Manage statuses.
+export const DEFAULT_CLIENT_CATEGORIES: Omit<StatusDef, 'id'>[] = [
+  { label: 'No rush', color: '#9CA3AF', sortOrder: 0 }, // gray
+  { label: 'Soon', color: '#F59E0B', sortOrder: 1 }, // amber
+  { label: 'ASAP', color: '#EF4444', sortOrder: 2 }, // red
+];
+
+// The exact folder name (created per job by the automation) whose files carry a
+// client category.
+export const SURVEY_FOLDER = '00_Surveys';
+
 // Turn an arbitrary label into a stable id/slug.
 export function toStatusId(label: string): string {
   return (
