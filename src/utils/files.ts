@@ -225,6 +225,22 @@ export async function getFolderView(
   ]);
   const prefix = currentPath ? `${currentPath}/` : '';
 
+  // A folder's "Modified" should reflect the newest change anywhere inside it.
+  // One pass over every file/folder in view: attribute each to the top-level
+  // entry it lives under (first path segment) and keep the max updatedAt.
+  // ISO date strings compare lexicographically = chronologically.
+  const folderNewest = new Map<string, string>();
+  for (const f of files) {
+    if (typeof f.path !== 'string' || !f.path.startsWith(prefix)) continue;
+    const rel = f.path.slice(prefix.length);
+    if (!rel) continue;
+    const seg = rel.split('/')[0];
+    const u = f.updatedAt;
+    if (!u) continue;
+    const cur = folderNewest.get(seg);
+    if (!cur || u > cur) folderNewest.set(seg, u);
+  }
+
   const items: FileItem[] = files
     .filter((f) => typeof f.path === 'string' && f.path.startsWith(prefix))
     .map((f) => ({ f, rel: (f.path as string).slice(prefix.length) }))
@@ -240,7 +256,11 @@ export async function getFolderView(
         path: f.path as string,
         statusId: object === 'folder' ? (statusMap[id] ?? null) : null,
         linkUrl: object === 'link' ? (f.linkUrl ?? undefined) : undefined,
-        updatedAt: f.updatedAt,
+        // Folders show the newest date of anything inside; files show their own.
+        updatedAt:
+          object === 'folder'
+            ? (folderNewest.get(rel) ?? f.updatedAt)
+            : f.updatedAt,
         creatorId: f.creatorId,
       };
     })
