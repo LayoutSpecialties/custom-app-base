@@ -39,7 +39,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
       <AutoRefresh />
       <Container>
         {view.isInternal && (
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex flex-wrap items-center gap-4 mb-6">
             <div className="flex-1 min-w-0">
               {view.companies && view.companies.length > 0 && (
                 <CompanyPicker
