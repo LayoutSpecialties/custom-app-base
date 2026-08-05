@@ -713,12 +713,12 @@ export function FolderList({
     return `${mm}/${dd}/${d.getFullYear()}`;
   };
 
-  function statusControl(item: FileItem, status?: StatusDef) {
+  function statusControl(item: FileItem, status?: StatusDef, fullWidth = false) {
     return isInternal ? (
-      <div className="flex items-center gap-2">
+      <div className={`flex items-center gap-2 min-w-0 ${fullWidth ? 'w-full' : ''}`}>
         <StatusDot color={status?.color ?? UNSET_COLOR} />
         <select
-          className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0"
+          className={`text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0 ${fullWidth ? 'w-full' : ''}`}
           value={item.statusId ?? ''}
           disabled={pendingId === item.id}
           onChange={(e) => changeStatus(item.id, e.target.value)}
@@ -1140,7 +1140,8 @@ export function FolderList({
                       <div
                         className={`${stacked ? 'flex' : 'hidden'} flex-wrap items-center gap-x-3 gap-y-1 mt-1`}
                       >
-                        {item.object === 'folder' && statusControl(item, status)}
+                        {item.object === 'folder' &&
+                          statusControl(item, status, true)}
                         {item.creatorName && (
                           <div className="text-xs text-gray-500">
                             By {item.creatorName}
