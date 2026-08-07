@@ -788,6 +788,15 @@ export function FolderList({
     const dd = String(d.getDate()).padStart(2, '0');
     return `${mm}/${dd}/${d.getFullYear()}`;
   };
+  const formatTime = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
 
   function statusControl(item: FileItem, status?: StatusDef, fullWidth = false) {
     return isInternal ? (
@@ -1263,7 +1272,8 @@ export function FolderList({
                         )}
                         {item.updatedAt && (
                           <div className="text-xs text-gray-500">
-                            Modified {formatDate(item.updatedAt)}
+                            Modified {formatDate(item.updatedAt)}{' '}
+                            {formatTime(item.updatedAt)}
                           </div>
                         )}
                       </div>
@@ -1281,8 +1291,11 @@ export function FolderList({
                     {item.creatorName}
                   </div>
 
-                  <div className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-sm text-gray-500`}>
-                    {formatDate(item.updatedAt)}
+                  <div className={`${stacked ? 'hidden' : 'block'} w-24 shrink-0 text-xs leading-tight text-gray-500`}>
+                    <div>{formatDate(item.updatedAt)}</div>
+                    <div className="text-gray-400">
+                      {formatTime(item.updatedAt)}
+                    </div>
                   </div>
 
                   <ItemMenu
