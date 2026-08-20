@@ -1,14 +1,17 @@
 import { neon } from '@neondatabase/serverless';
 import {
   DEFAULT_CLIENT_CATEGORIES,
+  DEFAULT_INCLUDES,
+  DEFAULT_JOB_TYPES,
   DEFAULT_STATUSES,
   toStatusId,
   type StatusDef,
 } from '@/utils/status';
 
-// Status lists: 'internal' = the workflow statuses your team sets on folders;
-// 'client' = the urgency categories clients set on survey files.
-export type StatusKind = 'internal' | 'client';
+// Managed lists: 'internal' = workflow statuses your team sets on folders;
+// 'client' = urgency categories clients set on survey files; 'job_type' /
+// 'include' = the job attributes a client sets on a top-level job folder.
+export type StatusKind = 'internal' | 'client' | 'job_type' | 'include';
 
 // Lazily resolve a SQL client. Returns null when no connection string is set,
 // so the app degrades gracefully (folders still list; statuses are just empty)
@@ -87,6 +90,17 @@ async function ready() {
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (channel_id, file_id)
     )`;
+    // Job type + includes for a top-level job folder. include_ids is a JSON
+    // array of include-list ids.
+    await sql`CREATE TABLE IF NOT EXISTS job_meta (
+      channel_id  text NOT NULL,
+      folder_id   text NOT NULL,
+      job_type_id text,
+      include_ids text NOT NULL DEFAULT '[]',
+      updated_by  text,
+      updated_at  timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (channel_id, folder_id)
+    )`;
     const seed = async (kind: StatusKind, defs: Omit<StatusDef, 'id'>[]) => {
       const n = (
         (await sql`SELECT count(*)::int AS n FROM statuses WHERE kind = ${kind}`) as {
@@ -102,6 +116,8 @@ async function ready() {
     };
     await seed('internal', DEFAULT_STATUSES);
     await seed('client', DEFAULT_CLIENT_CATEGORIES);
+    await seed('job_type', DEFAULT_JOB_TYPES);
+    await seed('include', DEFAULT_INCLUDES);
     schemaReady = true;
   }
   return sql;
@@ -266,6 +282,56 @@ export async function setFileClientStatus(
             VALUES (${channelId}, ${fileId}, ${statusId}, ${updatedBy ?? null}, now())
             ON CONFLICT (channel_id, file_id)
             DO UPDATE SET status_id = EXCLUDED.status_id,
+                          updated_by = EXCLUDED.updated_by,
+                          updated_at = now()`;
+}
+
+// Job type + includes for top-level job folders. folder_id -> ids.
+export interface JobMeta {
+  jobTypeId: string | null;
+  includeIds: string[];
+}
+
+export async function getJobMetaMap(
+  channelId: string,
+): Promise<Record<string, JobMeta>> {
+  const sql = await ready();
+  if (!sql) return {};
+  const rows = (await sql`SELECT folder_id, job_type_id, include_ids
+                          FROM job_meta WHERE channel_id = ${channelId}`) as {
+    folder_id: string;
+    job_type_id: string | null;
+    include_ids: string;
+  }[];
+  const map: Record<string, JobMeta> = {};
+  for (const r of rows) {
+    let includeIds: string[] = [];
+    try {
+      const parsed = JSON.parse(r.include_ids);
+      if (Array.isArray(parsed)) includeIds = parsed.map(String);
+    } catch {
+      /* leave empty */
+    }
+    map[r.folder_id] = { jobTypeId: r.job_type_id, includeIds };
+  }
+  return map;
+}
+
+export async function setJobMeta(
+  channelId: string,
+  folderId: string,
+  jobTypeId: string | null,
+  includeIds: string[],
+  updatedBy?: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  const includes = JSON.stringify(includeIds);
+  await sql`INSERT INTO job_meta (channel_id, folder_id, job_type_id, include_ids, updated_by, updated_at)
+            VALUES (${channelId}, ${folderId}, ${jobTypeId}, ${includes}, ${updatedBy ?? null}, now())
+            ON CONFLICT (channel_id, folder_id)
+            DO UPDATE SET job_type_id = EXCLUDED.job_type_id,
+                          include_ids = EXCLUDED.include_ids,
                           updated_by = EXCLUDED.updated_by,
                           updated_at = now()`;
 }

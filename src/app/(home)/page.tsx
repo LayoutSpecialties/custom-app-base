@@ -51,6 +51,8 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
             <ManageStatuses
               statuses={view.statuses}
               clientCategories={view.clientCategories}
+              jobTypes={view.jobTypes}
+              includes={view.includes}
               token={token}
             />
           </div>
@@ -62,6 +64,8 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
           currentPath={view.currentPath}
           statuses={view.statuses}
           clientCategories={view.clientCategories}
+          jobTypes={view.jobTypes}
+          includes={view.includes}
           isInternal={view.isInternal}
           channelId={view.channelId}
           companyId={view.companyId}

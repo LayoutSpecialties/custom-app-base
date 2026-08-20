@@ -186,7 +186,7 @@ export async function POST(request: Request) {
           }),
         );
         await recordCreator(created.id);
-        return Response.json({ ok: true });
+        return Response.json({ ok: true, id: created.id });
       }
 
       case 'delete': {

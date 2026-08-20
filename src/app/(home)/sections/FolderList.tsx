@@ -149,6 +149,8 @@ export function FolderList({
   currentPath,
   statuses,
   clientCategories,
+  jobTypes,
+  includes,
   isInternal,
   channelId,
   companyId,
@@ -160,6 +162,8 @@ export function FolderList({
   currentPath: string;
   statuses: StatusDef[];
   clientCategories: StatusDef[];
+  jobTypes: StatusDef[];
+  includes: StatusDef[];
   isInternal: boolean;
   channelId?: string;
   companyId?: string;
@@ -204,8 +208,26 @@ export function FolderList({
   const [surveyPrompt, setSurveyPrompt] = useState<
     { id: string; path: string }[] | null
   >(null);
+  const [jobMetaEdit, setJobMetaEdit] = useState<{
+    folderId: string;
+    name: string;
+    jobTypeId: string | null;
+    includeIds: string[];
+  } | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
+  const jobTypeById = new Map(jobTypes.map((s) => [s.id, s]));
+  const includeById = new Map(includes.map((s) => [s.id, s]));
+
+  // Compact tag for a top-level job, e.g. "Panel-Walls,HDs". '' when nothing set.
+  function jobTag(item: FileItem): string {
+    const type = item.jobTypeId ? jobTypeById.get(item.jobTypeId)?.label : '';
+    const inc = (item.includeIds ?? [])
+      .map((id) => includeById.get(id)?.label)
+      .filter(Boolean);
+    if (!type && inc.length === 0) return '';
+    return [type, inc.join(',')].filter(Boolean).join('-');
+  }
 
   // The pinned bars stack from the top: toolbar, then the selection bar (only
   // while items are selected), then the column header. Each one pins just below
@@ -279,7 +301,9 @@ export function FolderList({
     return `/api/download-selected?${params.toString()}`;
   }
 
-  async function postFiles(body: Record<string, unknown>) {
+  async function postFiles(
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
     setBusy(true);
     setError(null);
     try {
@@ -288,13 +312,13 @@ export function FolderList({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, companyId, ...body }),
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `Failed (${res.status})`);
-      }
+      const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error((j.error as string) || `Failed (${res.status})`);
       router.refresh();
+      return j;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Action failed');
+      return null;
     } finally {
       setBusy(false);
     }
@@ -614,6 +638,47 @@ export function FolderList({
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to set category');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openJobMeta(item: FileItem) {
+    setJobMetaEdit({
+      folderId: item.id,
+      name: item.name,
+      jobTypeId: item.jobTypeId ?? null,
+      includeIds: item.includeIds ?? [],
+    });
+  }
+
+  // Save a top-level job's type + includes (client owns it; internal can edit).
+  async function saveJobMeta() {
+    const edit = jobMetaEdit;
+    if (!edit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/job-meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          companyId,
+          folderId: edit.folderId,
+          path: edit.name, // top-level job: path === its name
+          jobTypeId: edit.jobTypeId,
+          includeIds: edit.includeIds,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `Failed (${res.status})`);
+      }
+      setJobMetaEdit(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save job details');
     } finally {
       setBusy(false);
     }
@@ -1013,9 +1078,22 @@ export function FolderList({
             type="button"
             disabled={busy || !newFolderName.trim()}
             onClick={async () => {
-              await postFiles({ action: 'newFolder', path: currentPath, name: newFolderName.trim() });
+              const name = newFolderName.trim();
+              const result = await postFiles({
+                action: 'newFolder',
+                path: currentPath,
+                name,
+              });
               setNewFolderOpen(false);
               setNewFolderName('');
+              // Prompt a client to set the job type/includes on a new job.
+              if (result?.id && currentPath === '' && !isInternal)
+                setJobMetaEdit({
+                  folderId: result.id as string,
+                  name,
+                  jobTypeId: null,
+                  includeIds: [],
+                });
             }}
             className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-40"
           >
@@ -1252,27 +1330,39 @@ export function FolderList({
                     {item.object === 'file' && <FileIcon />}
                     {item.object === 'link' && <LinkIcon />}
                     <div className="min-w-0 flex-1">
-                      {item.object === 'folder' ? (
-                        <button
-                          type="button"
-                          data-name
-                          title={item.name}
-                          onClick={() => navigate(item.path)}
-                          onMouseEnter={() => schedulePrefetch(item.path)}
-                          onMouseLeave={cancelPrefetch}
-                          className={`block w-full text-sm font-medium text-gray-900 text-left hover:underline ${stacked ? 'break-words' : 'truncate'}`}
-                        >
-                          {item.name}
-                        </button>
-                      ) : (
-                        <span
-                          data-name
-                          title={item.name}
-                          className={`block w-full text-sm font-medium text-gray-900 ${stacked ? 'break-words' : 'truncate'}`}
-                        >
-                          {item.name}
-                        </span>
-                      )}
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        {item.object === 'folder' ? (
+                          <button
+                            type="button"
+                            data-name
+                            title={item.name}
+                            onClick={() => navigate(item.path)}
+                            onMouseEnter={() => schedulePrefetch(item.path)}
+                            onMouseLeave={cancelPrefetch}
+                            className={`min-w-0 flex-1 text-sm font-medium text-gray-900 text-left hover:underline ${stacked ? 'break-words' : 'truncate'}`}
+                          >
+                            {item.name}
+                          </button>
+                        ) : (
+                          <span
+                            data-name
+                            title={item.name}
+                            className={`min-w-0 flex-1 text-sm font-medium text-gray-900 ${stacked ? 'break-words' : 'truncate'}`}
+                          >
+                            {item.name}
+                          </span>
+                        )}
+                        {currentPath === '' && item.isTopLevelJob && (
+                          <button
+                            type="button"
+                            onClick={() => openJobMeta(item)}
+                            title="Set job type and includes"
+                            className="shrink-0 text-[11px] leading-none text-gray-400 hover:text-gray-600"
+                          >
+                            {jobTag(item) || 'Set job type'}
+                          </button>
+                        )}
+                      </div>
                       {/* When the widest name won't fit beside the columns, the
                           Status and Modified columns move below the name — in a
                           single wrapping row — so the name stays fully readable
@@ -1571,6 +1661,99 @@ export function FolderList({
                   <span className="text-sm text-gray-800">{c.label}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {jobMetaEdit && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setJobMetaEdit(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5 max-h-[85vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Heading size="lg">Job details</Heading>
+            <Body size="sm" className="text-gray-600 mt-1 truncate">
+              {jobMetaEdit.name}
+            </Body>
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+
+            <div className="mt-4">
+              <div className="text-sm font-medium text-gray-700 mb-1">
+                Job type
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {jobTypes.map((t) => {
+                  const on = jobMetaEdit.jobTypeId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setJobMetaEdit((s) =>
+                          s ? { ...s, jobTypeId: on ? null : t.id } : s,
+                        )
+                      }
+                      className={`px-3 py-1 rounded-md border text-sm ${on ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm font-medium text-gray-700 mb-1">
+                Include
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {includes.map((inc) => {
+                  const on = jobMetaEdit.includeIds.includes(inc.id);
+                  return (
+                    <button
+                      key={inc.id}
+                      type="button"
+                      onClick={() =>
+                        setJobMetaEdit((s) =>
+                          s
+                            ? {
+                                ...s,
+                                includeIds: on
+                                  ? s.includeIds.filter((x) => x !== inc.id)
+                                  : [...s.includeIds, inc.id],
+                              }
+                            : s,
+                        )
+                      }
+                      className={`px-3 py-1 rounded-md border text-sm ${on ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {inc.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJobMetaEdit(null)}
+                className="text-sm px-3 py-1 rounded-md text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={saveJobMeta}
+                className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-40"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>

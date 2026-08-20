@@ -4,6 +4,7 @@ import {
   getFileClientStatusMap,
   getFileCreatorMap,
   getFolderStatusMap,
+  getJobMetaMap,
   listStatuses,
 } from '@/utils/db';
 import { withRateLimitRetry } from '@/utils/retry';
@@ -22,6 +23,9 @@ export interface FileItem {
   isSurveyFile?: boolean; // a file inside a job's 00_Surveys folder
   clientStatusId?: string | null; // client-set category (survey files only)
   statusEligible?: boolean; // folder gets an internal status (top-level or DWG child)
+  isTopLevelJob?: boolean; // a top-level job folder (carries job type + includes)
+  jobTypeId?: string | null; // top-level jobs only
+  includeIds?: string[]; // top-level jobs only
 }
 
 export interface Crumb {
@@ -42,6 +46,8 @@ export interface FolderView {
   channelId?: string;
   statuses: StatusDef[];
   clientCategories: StatusDef[]; // client-set categories for survey files
+  jobTypes: StatusDef[]; // job type options (top-level jobs)
+  includes: StatusDef[]; // include options (top-level jobs)
   currentPath: string;
   breadcrumb: Crumb[];
   items: FileItem[];
@@ -158,13 +164,17 @@ export async function getFolderView(
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 
-  const [statuses, clientCategories] = await Promise.all([
+  const [statuses, clientCategories, jobTypes, includes] = await Promise.all([
     listStatuses('internal'),
     listStatuses('client'),
+    listStatuses('job_type'),
+    listStatuses('include'),
   ]);
   const empty = {
     statuses,
     clientCategories,
+    jobTypes,
+    includes,
     currentPath: '',
     breadcrumb: [],
     items: [],
@@ -232,14 +242,21 @@ export async function getFolderView(
   // Fetch the file list, the status map, and the archived set in parallel.
   // Scope the file list to the current folder's subtree when drilling in (root
   // needs the whole channel to list top-level jobs + compute archived).
-  const [files, statusMap, archivedSet, recordedCreators, clientStatusMap] =
-    await Promise.all([
-      listAllFiles(assembly, channelId, currentPath || undefined),
-      getFolderStatusMap(channelId),
-      getArchivedSet(channelId),
-      getFileCreatorMap(channelId),
-      getFileClientStatusMap(channelId),
-    ]);
+  const [
+    files,
+    statusMap,
+    archivedSet,
+    recordedCreators,
+    clientStatusMap,
+    jobMetaMap,
+  ] = await Promise.all([
+    listAllFiles(assembly, channelId, currentPath || undefined),
+    getFolderStatusMap(channelId),
+    getArchivedSet(channelId),
+    getFileCreatorMap(channelId),
+    getFileClientStatusMap(channelId),
+    getJobMetaMap(channelId),
+  ]);
   const prefix = currentPath ? `${currentPath}/` : '';
 
   // A folder's "Modified" should reflect the newest change anywhere inside it.
@@ -274,6 +291,9 @@ export async function getFolderView(
       const statusEligible =
         object === 'folder' &&
         (segs.length === 1 || DWG_FOLDERS.includes(segs[segs.length - 2]));
+      // Top-level job folders carry a job type + includes.
+      const isTopLevelJob = object === 'folder' && segs.length === 1;
+      const meta = isTopLevelJob ? jobMetaMap[id] : undefined;
       return {
         id,
         name: rel,
@@ -290,6 +310,9 @@ export async function getFolderView(
         isSurveyFile,
         clientStatusId: isSurveyFile ? (clientStatusMap[id] ?? null) : undefined,
         statusEligible,
+        isTopLevelJob,
+        jobTypeId: isTopLevelJob ? (meta?.jobTypeId ?? null) : undefined,
+        includeIds: isTopLevelJob ? (meta?.includeIds ?? []) : undefined,
       };
     })
     .sort((a, b) => {
@@ -354,6 +377,8 @@ export async function getFolderView(
     channelId,
     statuses,
     clientCategories,
+    jobTypes,
+    includes,
     currentPath,
     breadcrumb,
     items: visibleItems,

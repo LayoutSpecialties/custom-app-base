@@ -26,7 +26,7 @@ function StatusSection({
 }: {
   title: string;
   description: string;
-  kind: 'internal' | 'client';
+  kind: 'internal' | 'client' | 'job_type' | 'include';
   statuses: StatusDef[];
   token?: string;
 }) {
@@ -108,10 +108,14 @@ function StatusSection({
 export function ManageStatuses({
   statuses,
   clientCategories,
+  jobTypes,
+  includes,
   token,
 }: {
   statuses: StatusDef[];
   clientCategories: StatusDef[];
+  jobTypes: StatusDef[];
+  includes: StatusDef[];
   token?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -146,6 +150,20 @@ export function ManageStatuses({
               description="Levels a client can set on files they upload into a job's 00_Surveys folder — to tell you how soon they need it."
               kind="client"
               statuses={clientCategories}
+              token={token}
+            />
+            <StatusSection
+              title="Job types"
+              description="The job type a client picks for a top-level job (one per job), shown by the job name."
+              kind="job_type"
+              statuses={jobTypes}
+              token={token}
+            />
+            <StatusSection
+              title="Includes"
+              description="What a job includes — a client can pick any of these for a top-level job."
+              kind="include"
+              statuses={includes}
               token={token}
             />
           </div>

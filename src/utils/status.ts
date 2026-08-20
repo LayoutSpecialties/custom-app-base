@@ -37,6 +37,20 @@ export const DWG_FOLDERS = [
   '02_Architectural DWGs',
 ];
 
+// Job attributes a client sets on a top-level job folder — both managed lists,
+// editable under Manage statuses. Job type = pick one; includes = pick any.
+export const DEFAULT_JOB_TYPES: Omit<StatusDef, 'id'>[] = [
+  { label: 'Stick', color: '#6B7280', sortOrder: 0 },
+  { label: 'Panel', color: '#6B7280', sortOrder: 1 },
+];
+export const DEFAULT_INCLUDES: Omit<StatusDef, 'id'>[] = [
+  { label: 'Walls', color: '#6B7280', sortOrder: 0 },
+  { label: 'HDs', color: '#6B7280', sortOrder: 1 },
+  { label: 'Posts', color: '#6B7280', sortOrder: 2 },
+  { label: 'ABs', color: '#6B7280', sortOrder: 3 },
+  { label: 'Steel', color: '#6B7280', sortOrder: 4 },
+];
+
 // Turn an arbitrary label into a stable id/slug.
 export function toStatusId(label: string): string {
   return (
