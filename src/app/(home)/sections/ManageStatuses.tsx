@@ -140,6 +140,19 @@ export function ManageStatuses({
             onClick={() => setOpen(false)}
           />
           <div className="fixed right-2 top-2 z-40 w-[30rem] max-w-[calc(100vw-1rem)] max-h-[calc(100vh-1rem)] overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-6">
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-0 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-2">
+              <span className="text-sm font-medium text-gray-700">
+                Manage statuses
+              </span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                className="text-gray-500 hover:bg-gray-100 rounded px-2 leading-none text-xl"
+              >
+                &times;
+              </button>
+            </div>
             <StatusSection
               title="Statuses"
               description="Rename, recolor, reorder, add, or remove the statuses your team can assign to folders."
