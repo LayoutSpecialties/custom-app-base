@@ -29,6 +29,14 @@ export const DEFAULT_CLIENT_CATEGORIES: Omit<StatusDef, 'id'>[] = [
 // client category.
 export const SURVEY_FOLDER = '00_Surveys';
 
+// Internal folder statuses appear ONLY on top-level job folders and on the
+// direct subfolders of these DWG folders — nowhere else.
+export const DWG_FOLDERS = [
+  '01_AutoCAD DWGs',
+  '01_Panel DWGs',
+  '02_Architectural DWGs',
+];
+
 // Turn an arbitrary label into a stable id/slug.
 export function toStatusId(label: string): string {
   return (

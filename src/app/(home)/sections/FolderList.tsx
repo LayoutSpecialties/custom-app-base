@@ -863,7 +863,8 @@ export function FolderList({
   // What goes in the Status column for a row: a folder's internal status, or a
   // survey file's client category, or nothing.
   function statusSlot(item: FileItem, status?: StatusDef, fullWidth = false) {
-    if (item.object === 'folder') return statusControl(item, status, fullWidth);
+    if (item.object === 'folder')
+      return item.statusEligible ? statusControl(item, status, fullWidth) : null;
     if (item.isSurveyFile) return clientStatusControl(item, fullWidth);
     return null;
   }

@@ -7,7 +7,7 @@ import {
   listStatuses,
 } from '@/utils/db';
 import { withRateLimitRetry } from '@/utils/retry';
-import { SURVEY_FOLDER, type StatusDef } from '@/utils/status';
+import { DWG_FOLDERS, SURVEY_FOLDER, type StatusDef } from '@/utils/status';
 
 export interface FileItem {
   id: string;
@@ -21,6 +21,7 @@ export interface FileItem {
   creatorName?: string; // resolved display name (all viewers)
   isSurveyFile?: boolean; // a file inside a job's 00_Surveys folder
   clientStatusId?: string | null; // client-set category (survey files only)
+  statusEligible?: boolean; // folder gets an internal status (top-level or DWG child)
 }
 
 export interface Crumb {
@@ -266,9 +267,13 @@ export async function getFolderView(
         f.object === 'folder' || f.object === 'link' ? f.object : 'file';
       const id = f.id ?? (f.path as string);
       // A survey file is a file inside a job's 00_Surveys folder.
-      const isSurveyFile =
-        object === 'file' &&
-        (f.path as string).split('/').includes(SURVEY_FOLDER);
+      const segs = (f.path as string).split('/');
+      const isSurveyFile = object === 'file' && segs.includes(SURVEY_FOLDER);
+      // Internal status shows on top-level job folders and on the direct
+      // subfolders of a DWG folder — nowhere else.
+      const statusEligible =
+        object === 'folder' &&
+        (segs.length === 1 || DWG_FOLDERS.includes(segs[segs.length - 2]));
       return {
         id,
         name: rel,
@@ -284,6 +289,7 @@ export async function getFolderView(
         creatorId: f.creatorId,
         isSurveyFile,
         clientStatusId: isSurveyFile ? (clientStatusMap[id] ?? null) : undefined,
+        statusEligible,
       };
     })
     .sort((a, b) => {
