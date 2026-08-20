@@ -139,7 +139,7 @@ export function ManageStatuses({
             aria-hidden="true"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-[30rem] max-w-[92vw] max-h-[80vh] overflow-auto z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-6">
+          <div className="fixed right-2 top-2 z-40 w-[30rem] max-w-[calc(100vw-1rem)] max-h-[calc(100vh-1rem)] overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-6">
             <StatusSection
               title="Statuses"
               description="Rename, recolor, reorder, add, or remove the statuses your team can assign to folders."
