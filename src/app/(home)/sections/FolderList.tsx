@@ -270,6 +270,14 @@ export function FolderList({
     if (companyId) params.set('companyId', companyId);
     return `/api/download-folder?${params.toString()}`;
   }
+  function downloadSelectedHref() {
+    const params = new URLSearchParams();
+    if (token) params.set('token', token);
+    if (companyId) params.set('companyId', companyId);
+    for (const it of selectedItems())
+      if (it.object !== 'link') params.append('path', it.path);
+    return `/api/download-selected?${params.toString()}`;
+  }
 
   async function postFiles(body: Record<string, unknown>) {
     setBusy(true);
@@ -1071,6 +1079,14 @@ export function FolderList({
               {selected.size} selected
             </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
+          <a
+            href={downloadSelectedHref()}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-50"
+          >
+            Download
+          </a>
           {!viewingArchived && currentPath === '' && (
             <button
               type="button"
