@@ -73,6 +73,7 @@ function StatusSection({
             key={s.id}
             status={s}
             busy={busy}
+            withColor={kind === 'internal' || kind === 'client'}
             canMoveUp={i > 0}
             canMoveDown={i < statuses.length - 1}
             onSave={(label, color) =>
@@ -97,6 +98,7 @@ function StatusSection({
 
       <AddRow
         busy={busy}
+        withColor={kind === 'internal' || kind === 'client'}
         onAdd={(label, color) =>
           run(() => postStatus({ token, action: 'create', kind, label, color }))
         }
@@ -176,6 +178,7 @@ export function ManageStatuses({
 function EditRow({
   status,
   busy,
+  withColor,
   canMoveUp,
   canMoveDown,
   onSave,
@@ -185,6 +188,7 @@ function EditRow({
 }: {
   status: StatusDef;
   busy: boolean;
+  withColor: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onSave: (label: string, color: string) => void;
@@ -198,14 +202,16 @@ function EditRow({
 
   return (
     <div className="flex items-center gap-2 py-2">
-      <input
-        type="color"
-        value={color}
-        disabled={busy}
-        onChange={(e) => setColor(e.target.value)}
-        aria-label={`${status.label} color`}
-        className="w-8 h-8 p-0 border border-gray-300 rounded cursor-pointer bg-white"
-      />
+      {withColor && (
+        <input
+          type="color"
+          value={color}
+          disabled={busy}
+          onChange={(e) => setColor(e.target.value)}
+          aria-label={`${status.label} color`}
+          className="w-8 h-8 p-0 border border-gray-300 rounded cursor-pointer bg-white"
+        />
+      )}
       <input
         type="text"
         value={label}
@@ -262,9 +268,11 @@ function EditRow({
 
 function AddRow({
   busy,
+  withColor,
   onAdd,
 }: {
   busy: boolean;
+  withColor: boolean;
   onAdd: (label: string, color: string) => void;
 }) {
   const [label, setLabel] = useState('');
@@ -272,14 +280,16 @@ function AddRow({
 
   return (
     <div className="flex items-center gap-2 pt-4 mt-2 border-t border-gray-200">
-      <input
-        type="color"
-        value={color}
-        disabled={busy}
-        onChange={(e) => setColor(e.target.value)}
-        aria-label="New status color"
-        className="w-8 h-8 p-0 border border-gray-300 rounded cursor-pointer bg-white"
-      />
+      {withColor && (
+        <input
+          type="color"
+          value={color}
+          disabled={busy}
+          onChange={(e) => setColor(e.target.value)}
+          aria-label="New status color"
+          className="w-8 h-8 p-0 border border-gray-300 rounded cursor-pointer bg-white"
+        />
+      )}
       <input
         type="text"
         value={label}
