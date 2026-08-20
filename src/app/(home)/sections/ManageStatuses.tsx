@@ -139,8 +139,8 @@ export function ManageStatuses({
             aria-hidden="true"
             onClick={() => setOpen(false)}
           />
-          <div className="fixed right-2 top-2 z-40 w-[30rem] max-w-[calc(100vw-1rem)] max-h-[calc(100vh-1rem)] overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg p-4 space-y-6">
-            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-0 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-2">
+          <div className="fixed right-2 top-2 z-40 flex max-h-[calc(100vh-1rem)] w-[30rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2.5">
               <span className="text-sm font-medium text-gray-700">
                 Manage statuses
               </span>
@@ -148,11 +148,12 @@ export function ManageStatuses({
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="text-gray-500 hover:bg-gray-100 rounded px-2 leading-none text-xl"
+                className="rounded px-2 text-xl leading-none text-gray-500 hover:bg-gray-200"
               >
                 &times;
               </button>
             </div>
+            <div className="space-y-6 overflow-auto p-4">
             <StatusSection
               title="Statuses"
               description="Rename, recolor, reorder, add, or remove the statuses your team can assign to folders."
@@ -181,6 +182,7 @@ export function ManageStatuses({
               statuses={includes}
               token={token}
             />
+            </div>
           </div>
         </>
       )}
