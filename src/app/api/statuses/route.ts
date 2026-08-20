@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     token?: string;
     action?: 'create' | 'update' | 'delete' | 'reorder';
-    kind?: 'internal' | 'client'; // which list (create only); update/delete/reorder are by id
+    kind?: 'internal' | 'client' | 'job_type' | 'include'; // which list (create only); update/delete/reorder are by id
     id?: string;
     label?: string;
     color?: string;
@@ -43,7 +43,15 @@ export async function POST(request: Request) {
             { error: 'Color must be a hex value like #3B82F6' },
             { status: 400 },
           );
-        await createStatus(label, color, body.kind === 'client' ? 'client' : 'internal');
+        await createStatus(
+          label,
+          color,
+          body.kind === 'client' ||
+            body.kind === 'job_type' ||
+            body.kind === 'include'
+            ? body.kind
+            : 'internal',
+        );
         break;
 
       case 'update':
