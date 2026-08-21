@@ -62,11 +62,20 @@ function ItemMenu({
   onToggle: () => void;
   children: ReactNode;
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [dropUp, setDropUp] = useState(false);
+
   return (
-    <div className="relative shrink-0">
+    <div ref={wrapRef} className="relative shrink-0">
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => {
+          // When the row is near the bottom of the screen, open the menu upward
+          // so it isn't cut off.
+          const rect = wrapRef.current?.getBoundingClientRect();
+          if (rect) setDropUp(window.innerHeight - rect.bottom < 260);
+          onToggle();
+        }}
         aria-label="Actions"
         className="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded-md leading-none"
       >
@@ -75,7 +84,9 @@ function ItemMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" aria-hidden="true" onClick={onToggle} />
-          <div className="absolute right-0 mt-1 w-44 z-20 bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+          <div
+            className={`absolute right-0 w-44 z-20 bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+          >
             {children}
           </div>
         </>
@@ -1117,7 +1128,10 @@ export function FolderList({
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
 
       {confirmDelete && (
-        <div className="mb-3 flex items-center gap-3 p-3 rounded-md border border-red-200 bg-red-50 text-sm">
+        <div
+          className="sticky z-20 mb-3 flex items-center gap-3 p-3 rounded-md border border-red-200 bg-red-50 text-sm"
+          style={{ top: toolbarHeight }}
+        >
           <span className="text-red-800">
             Delete &ldquo;{confirmDelete.name}&rdquo;
             {confirmDelete.object === 'folder' ? ' and everything inside it' : ''}? This
