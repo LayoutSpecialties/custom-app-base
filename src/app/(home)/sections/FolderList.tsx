@@ -1016,7 +1016,7 @@ export function FolderList({
                 }}
                 className="text-sm px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                New folder
+                {currentPath === '' ? 'New Job' : 'New folder'}
               </button>
               <input
                 ref={fileInputRef}
@@ -1070,7 +1070,7 @@ export function FolderList({
             autoFocus
             value={newFolderName}
             disabled={busy}
-            placeholder="Folder name"
+            placeholder={currentPath === '' ? 'Job name' : 'Folder name'}
             onChange={(e) => setNewFolderName(e.target.value)}
             className="text-sm border border-gray-300 rounded-md px-2 py-1 w-64"
           />
