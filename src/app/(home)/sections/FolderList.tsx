@@ -181,6 +181,7 @@ export function FolderList({
   const [confirmDelete, setConfirmDelete] = useState<FileItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [dragFolderId, setDragFolderId] = useState<string | null>(null);
   const [historyItem, setHistoryItem] = useState<FileItem | null>(null);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -349,7 +350,10 @@ export function FolderList({
     notifyTimerRef.current = setTimeout(flushNotifications, 60000);
   }
 
-  async function uploadEntries(uploads: Upload[]) {
+  async function uploadEntries(
+    uploads: Upload[],
+    basePath: string = currentPath,
+  ) {
     if (uploads.length === 0) return;
     setBusy(true);
     setError(null);
@@ -362,7 +366,7 @@ export function FolderList({
         let rel = '';
         for (const p of parts) {
           rel = rel ? `${rel}/${p}` : p;
-          folderSet.add([currentPath, rel].filter(Boolean).join('/'));
+          folderSet.add([basePath, rel].filter(Boolean).join('/'));
         }
       }
       const folderPaths = Array.from(folderSet).sort(
@@ -391,7 +395,7 @@ export function FolderList({
       for (const { file, relPath } of uploads) {
         const parts = relPath.split('/');
         const name = parts.pop() as string;
-        const parentPath = [currentPath, ...parts].filter(Boolean).join('/');
+        const parentPath = [basePath, ...parts].filter(Boolean).join('/');
         const res = await fetch('/api/files', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -411,7 +415,7 @@ export function FolderList({
         const put = await fetch(uploadUrl, { method: 'PUT', body: file });
         if (!put.ok)
           throw new Error(`Upload of "${name}" failed (${put.status})`);
-        const fullPath = [currentPath, relPath].filter(Boolean).join('/');
+        const fullPath = [basePath, relPath].filter(Boolean).join('/');
         if (id && fullPath.split('/').includes(SURVEY_FOLDER))
           surveyUploads.push({ id, path: fullPath });
         else otherPaths.push(fullPath);
@@ -445,8 +449,8 @@ export function FolderList({
     );
   }
 
-  async function uploadDataTransfer(dt: DataTransfer) {
-    uploadEntries(await uploadsFromDataTransfer(dt));
+  async function uploadDataTransfer(dt: DataTransfer, basePath?: string) {
+    uploadEntries(await uploadsFromDataTransfer(dt), basePath ?? currentPath);
   }
 
   // Capture drag-and-drop at the window level so a file dropped anywhere on the
@@ -458,6 +462,7 @@ export function FolderList({
       if (e.dataTransfer?.types?.includes('Files')) {
         e.preventDefault();
         setDragOver(true);
+        setDragFolderId(null); // over the page, not a specific folder
       }
     };
     const onDragLeave = (e: DragEvent) => {
@@ -1324,7 +1329,42 @@ export function FolderList({
                 ? statusById.get(item.statusId)
                 : undefined;
               return (
-                <li key={item.id} className="flex items-center gap-3 px-4 py-3">
+                <li
+                  key={item.id}
+                  className={`flex items-center gap-3 px-4 py-3 ${
+                    item.object === 'folder' && dragFolderId === item.id
+                      ? 'bg-blue-50 outline outline-2 -outline-offset-2 outline-blue-400 rounded-md'
+                      : ''
+                  }`}
+                  onDragOver={
+                    item.object === 'folder'
+                      ? (e) => {
+                          if (e.dataTransfer?.types?.includes('Files')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDragOver(false);
+                            setDragFolderId(item.id);
+                          }
+                        }
+                      : undefined
+                  }
+                  onDrop={
+                    item.object === 'folder'
+                      ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDragFolderId(null);
+                          setDragOver(false);
+                          if (
+                            e.dataTransfer &&
+                            (e.dataTransfer.items?.length ||
+                              e.dataTransfer.files?.length)
+                          )
+                            uploadDataTransfer(e.dataTransfer, item.path);
+                        }
+                      : undefined
+                  }
+                >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {item.object === 'folder' && <FolderIcon />}
                     {item.object === 'file' && <FileIcon />}
