@@ -947,26 +947,29 @@ export function FolderList({
     if (item.object === 'folder')
       return item.statusEligible ? statusControl(item, status, fullWidth) : null;
     if (item.isSurveyFile) {
-      // Survey files show BOTH our internal status (so the client can see we're
-      // on it) and the client's own category. Clients only see our status once
-      // we've actually set one.
+      // Survey files show BOTH the client's Priority (left/top) and our internal
+      // Status (right/bottom) — so the client can see we're on it. Side by side
+      // when there's room, stacked (Priority over Status) when narrow. Clients
+      // only see our status once we've actually set one.
       const showOurStatus = isInternal || !!item.statusId;
+      const labelClass =
+        'text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5';
       return (
-        <div className="space-y-1">
+        <div
+          className={
+            stacked ? 'flex flex-col gap-1' : 'flex flex-row items-start gap-3'
+          }
+        >
+          <div className="min-w-0">
+            <div className={labelClass}>Priority</div>
+            {clientStatusControl(item, fullWidth)}
+          </div>
           {showOurStatus && (
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5">
-                Status
-              </div>
+            <div className="min-w-0">
+              <div className={labelClass}>Status</div>
               {statusControl(item, status, fullWidth)}
             </div>
           )}
-          <div>
-            <div className="text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5">
-              Priority
-            </div>
-            {clientStatusControl(item, fullWidth)}
-          </div>
         </div>
       );
     }
@@ -1270,7 +1273,7 @@ export function FolderList({
               <span className="w-5 shrink-0" />
               <div ref={nameProbeRef} className="min-w-0 flex-1" />
             </div>
-            <div className="w-52 shrink-0" />
+            <div className="w-60 shrink-0" />
             <div className="w-32 shrink-0" />
             <div className="w-24 shrink-0" />
             <div className="w-8 shrink-0" />
@@ -1330,7 +1333,7 @@ export function FolderList({
                 <button
                   type="button"
                   onClick={() => toggleSort('status')}
-                  className="block w-52 shrink-0 text-left hover:text-gray-700"
+                  className="block w-60 shrink-0 text-left hover:text-gray-700"
                 >
                   Status{arrow('status')}
                 </button>
@@ -1464,7 +1467,7 @@ export function FolderList({
                     </div>
                   </div>
 
-                  <div className={`${stacked ? 'hidden' : 'block w-52'} shrink-0`}>
+                  <div className={`${stacked ? 'hidden' : 'block w-60'} shrink-0`}>
                     {statusSlot(item, status)}
                   </div>
 
