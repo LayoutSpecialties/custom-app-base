@@ -957,7 +957,7 @@ export function FolderList({
       return (
         <div
           className={
-            stacked ? 'flex flex-col gap-1' : 'flex flex-row items-start gap-3'
+            stacked ? 'flex flex-col gap-1' : 'flex flex-row items-start gap-6'
           }
         >
           <div className="min-w-0">
@@ -1273,7 +1273,7 @@ export function FolderList({
               <span className="w-5 shrink-0" />
               <div ref={nameProbeRef} className="min-w-0 flex-1" />
             </div>
-            <div className="w-60 shrink-0" />
+            <div className="w-72 shrink-0" />
             <div className="w-32 shrink-0" />
             <div className="w-24 shrink-0" />
             <div className="w-8 shrink-0" />
@@ -1333,7 +1333,7 @@ export function FolderList({
                 <button
                   type="button"
                   onClick={() => toggleSort('status')}
-                  className="block w-60 shrink-0 text-left hover:text-gray-700"
+                  className="block w-72 shrink-0 text-left hover:text-gray-700"
                 >
                   Status{arrow('status')}
                 </button>
@@ -1467,7 +1467,7 @@ export function FolderList({
                     </div>
                   </div>
 
-                  <div className={`${stacked ? 'hidden' : 'block w-60'} shrink-0`}>
+                  <div className={`${stacked ? 'hidden' : 'block w-72'} shrink-0`}>
                     {statusSlot(item, status)}
                   </div>
 
