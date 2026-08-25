@@ -946,7 +946,30 @@ export function FolderList({
   function statusSlot(item: FileItem, status?: StatusDef, fullWidth = false) {
     if (item.object === 'folder')
       return item.statusEligible ? statusControl(item, status, fullWidth) : null;
-    if (item.isSurveyFile) return clientStatusControl(item, fullWidth);
+    if (item.isSurveyFile) {
+      // Survey files show BOTH our internal status (so the client can see we're
+      // on it) and the client's own category. Clients only see our status once
+      // we've actually set one.
+      const showOurStatus = isInternal || !!item.statusId;
+      return (
+        <div className="space-y-1">
+          {showOurStatus && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5">
+                Status
+              </div>
+              {statusControl(item, status, fullWidth)}
+            </div>
+          )}
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5">
+              Priority
+            </div>
+            {clientStatusControl(item, fullWidth)}
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 

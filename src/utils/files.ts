@@ -299,7 +299,8 @@ export async function getFolderView(
         name: rel,
         object,
         path: f.path as string,
-        statusId: object === 'folder' ? (statusMap[id] ?? null) : null,
+        statusId:
+          object === 'folder' || isSurveyFile ? (statusMap[id] ?? null) : null,
         linkUrl: object === 'link' ? (f.linkUrl ?? undefined) : undefined,
         // Folders show the newest date of anything inside; files show their own.
         updatedAt:
