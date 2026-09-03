@@ -1469,7 +1469,7 @@ export function FolderList({
                             {item.name}
                           </span>
                         )}
-                        {currentPath === '' && item.isTopLevelJob && (
+                        {!stacked && currentPath === '' && item.isTopLevelJob && (
                           <button
                             type="button"
                             onClick={() => openJobMeta(item)}
@@ -1488,6 +1488,16 @@ export function FolderList({
                       <div
                         className={`${stacked ? 'flex' : 'hidden'} flex-wrap items-center gap-x-3 gap-y-1 mt-1`}
                       >
+                        {currentPath === '' && item.isTopLevelJob && (
+                          <button
+                            type="button"
+                            onClick={() => openJobMeta(item)}
+                            title="Set job type and includes"
+                            className="text-[11px] leading-none text-gray-400 hover:text-gray-600"
+                          >
+                            {jobTag(item) || 'Set job type'}
+                          </button>
+                        )}
                         {statusSlot(item, status, true)}
                         {item.creatorName && (
                           <div className="text-xs text-gray-500">
