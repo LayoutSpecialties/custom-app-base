@@ -53,6 +53,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
               clientCategories={view.clientCategories}
               jobTypes={view.jobTypes}
               includes={view.includes}
+              jobTemplate={view.jobTemplate}
               token={token}
             />
           </div>
@@ -66,6 +67,7 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
           clientCategories={view.clientCategories}
           jobTypes={view.jobTypes}
           includes={view.includes}
+          jobTemplate={view.jobTemplate}
           isInternal={view.isInternal}
           channelId={view.channelId}
           companyId={view.companyId}

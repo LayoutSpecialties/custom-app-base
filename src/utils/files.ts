@@ -48,6 +48,7 @@ export interface FolderView {
   clientCategories: StatusDef[]; // client-set categories for survey files
   jobTypes: StatusDef[]; // job type options (top-level jobs)
   includes: StatusDef[]; // include options (top-level jobs)
+  jobTemplate: StatusDef[]; // standard subfolders auto-created for a new job (label = path)
   currentPath: string;
   breadcrumb: Crumb[];
   items: FileItem[];
@@ -164,17 +165,20 @@ export async function getFolderView(
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 
-  const [statuses, clientCategories, jobTypes, includes] = await Promise.all([
-    listStatuses('internal'),
-    listStatuses('client'),
-    listStatuses('job_type'),
-    listStatuses('include'),
-  ]);
+  const [statuses, clientCategories, jobTypes, includes, jobTemplate] =
+    await Promise.all([
+      listStatuses('internal'),
+      listStatuses('client'),
+      listStatuses('job_type'),
+      listStatuses('include'),
+      listStatuses('job_folder'),
+    ]);
   const empty = {
     statuses,
     clientCategories,
     jobTypes,
     includes,
+    jobTemplate,
     currentPath: '',
     breadcrumb: [],
     items: [],
@@ -380,6 +384,7 @@ export async function getFolderView(
     clientCategories,
     jobTypes,
     includes,
+    jobTemplate,
     currentPath,
     breadcrumb,
     items: visibleItems,

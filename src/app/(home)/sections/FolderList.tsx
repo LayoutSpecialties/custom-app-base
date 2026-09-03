@@ -11,7 +11,12 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Body, Heading } from '@assembly-js/design-system';
 import type { FileItem, Crumb } from '@/utils/files';
 import type { StatusDef } from '@/utils/status';
-import { SURVEY_FOLDER, UNSET_COLOR } from '@/utils/status';
+import {
+  FLOOR_OPTIONS,
+  FLOOR_PARENT,
+  SURVEY_FOLDER,
+  UNSET_COLOR,
+} from '@/utils/status';
 
 function FolderIcon() {
   return (
@@ -162,6 +167,7 @@ export function FolderList({
   clientCategories,
   jobTypes,
   includes,
+  jobTemplate,
   isInternal,
   channelId,
   companyId,
@@ -175,6 +181,7 @@ export function FolderList({
   clientCategories: StatusDef[];
   jobTypes: StatusDef[];
   includes: StatusDef[];
+  jobTemplate: StatusDef[];
   isInternal: boolean;
   channelId?: string;
   companyId?: string;
@@ -225,6 +232,8 @@ export function FolderList({
     name: string;
     jobTypeId: string | null;
     includeIds: string[];
+    isNew?: boolean; // a brand-new job → also offer floors
+    floors: string[]; // floor folders to create (new jobs only)
   } | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
@@ -665,16 +674,37 @@ export function FolderList({
       name: item.name,
       jobTypeId: item.jobTypeId ?? null,
       includeIds: item.includeIds ?? [],
+      floors: [],
     });
   }
 
   // Save a top-level job's type + includes (client owns it; internal can edit).
+  // On a brand-new job, also create the chosen floor folders.
   async function saveJobMeta() {
     const edit = jobMetaEdit;
     if (!edit) return;
     setBusy(true);
     setError(null);
     try {
+      if (edit.isNew && edit.floors.length > 0) {
+        const paths = edit.floors.map(
+          (f) => `${edit.name}/${FLOOR_PARENT}/${f}`,
+        );
+        const r = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            companyId,
+            action: 'ensureFolders',
+            paths,
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error || 'Failed to create floors');
+        }
+      }
       const res = await fetch('/api/job-meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1128,14 +1158,21 @@ export function FolderList({
               });
               setNewFolderOpen(false);
               setNewFolderName('');
-              // Prompt a client to set the job type/includes on a new job.
-              if (result?.id && currentPath === '' && !isInternal)
+              if (result?.id && currentPath === '') {
+                // Auto-create the standard folder tree for the new job.
+                const paths = jobTemplate.map((t) => `${name}/${t.label}`);
+                if (paths.length > 0)
+                  await postFiles({ action: 'ensureFolders', paths });
+                // Open the new-job setup: floors + job type/includes.
                 setJobMetaEdit({
                   folderId: result.id as string,
                   name,
                   jobTypeId: null,
                   includeIds: [],
+                  isNew: true,
+                  floors: [],
                 });
+              }
             }}
             className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-40"
           >
@@ -1755,11 +1792,50 @@ export function FolderList({
             className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5 max-h-[85vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <Heading size="lg">Job details</Heading>
+            <Heading size="lg">
+              {jobMetaEdit.isNew ? 'Set up new job' : 'Job details'}
+            </Heading>
             <Body size="sm" className="text-gray-600 mt-1 truncate">
               {jobMetaEdit.name}
             </Body>
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+
+            {jobMetaEdit.isNew && (
+              <div className="mt-4">
+                <div className="text-sm font-medium text-gray-700 mb-1">
+                  Floors
+                </div>
+                <div className="text-xs text-gray-500 mb-2">
+                  Created inside 01_AutoCAD DWGs.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {FLOOR_OPTIONS.map((f) => {
+                    const on = jobMetaEdit.floors.includes(f);
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() =>
+                          setJobMetaEdit((s) =>
+                            s
+                              ? {
+                                  ...s,
+                                  floors: on
+                                    ? s.floors.filter((x) => x !== f)
+                                    : [...s.floors, f],
+                                }
+                              : s,
+                          )
+                        }
+                        className={`px-3 py-1 rounded-md border text-sm ${on ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                      >
+                        {f.replace(/^\d+_/, '')}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="mt-4">
               <div className="text-sm font-medium text-gray-700 mb-1">

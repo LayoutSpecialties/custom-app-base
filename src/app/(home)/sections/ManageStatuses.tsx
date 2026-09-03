@@ -26,7 +26,7 @@ function StatusSection({
 }: {
   title: string;
   description: string;
-  kind: 'internal' | 'client' | 'job_type' | 'include';
+  kind: 'internal' | 'client' | 'job_type' | 'include' | 'job_folder';
   statuses: StatusDef[];
   token?: string;
 }) {
@@ -112,12 +112,14 @@ export function ManageStatuses({
   clientCategories,
   jobTypes,
   includes,
+  jobTemplate,
   token,
 }: {
   statuses: StatusDef[];
   clientCategories: StatusDef[];
   jobTypes: StatusDef[];
   includes: StatusDef[];
+  jobTemplate: StatusDef[];
   token?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -180,6 +182,13 @@ export function ManageStatuses({
               description="What a job includes — a client can pick any of these for a top-level job."
               kind="include"
               statuses={includes}
+              token={token}
+            />
+            <StatusSection
+              title="Job folder template"
+              description="Folders auto-created inside every new job. Each row is a folder path (use / for subfolders). Floors are chosen per job and created inside 01_AutoCAD DWGs."
+              kind="job_folder"
+              statuses={jobTemplate}
               token={token}
             />
             </div>

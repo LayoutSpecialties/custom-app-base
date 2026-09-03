@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless';
 import {
   DEFAULT_CLIENT_CATEGORIES,
   DEFAULT_INCLUDES,
+  DEFAULT_JOB_TEMPLATE,
   DEFAULT_JOB_TYPES,
   DEFAULT_STATUSES,
   toStatusId,
@@ -10,8 +11,15 @@ import {
 
 // Managed lists: 'internal' = workflow statuses your team sets on folders;
 // 'client' = urgency categories clients set on survey files; 'job_type' /
-// 'include' = the job attributes a client sets on a top-level job folder.
-export type StatusKind = 'internal' | 'client' | 'job_type' | 'include';
+// 'include' = the job attributes a client sets on a top-level job folder;
+// 'job_folder' = the standard subfolder tree auto-created for a new job (each
+// row's label is a folder path).
+export type StatusKind =
+  | 'internal'
+  | 'client'
+  | 'job_type'
+  | 'include'
+  | 'job_folder';
 
 // Lazily resolve a SQL client. Returns null when no connection string is set,
 // so the app degrades gracefully (folders still list; statuses are just empty)
@@ -118,6 +126,14 @@ async function ready() {
     await seed('client', DEFAULT_CLIENT_CATEGORIES);
     await seed('job_type', DEFAULT_JOB_TYPES);
     await seed('include', DEFAULT_INCLUDES);
+    await seed(
+      'job_folder',
+      DEFAULT_JOB_TEMPLATE.map((path, i) => ({
+        label: path,
+        color: '#6B7280',
+        sortOrder: i,
+      })),
+    );
     schemaReady = true;
   }
   return sql;

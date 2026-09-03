@@ -51,6 +51,37 @@ export const DEFAULT_INCLUDES: Omit<StatusDef, 'id'>[] = [
   { label: 'Steel', color: '#6B7280', sortOrder: 4 },
 ];
 
+// The standard subfolder tree auto-created inside a new job. Editable in the app
+// (Manage statuses → Job folder template). Paths are relative to the job root.
+// Floors are NOT here — they're chosen per job and created inside FLOOR_PARENT.
+export const DEFAULT_JOB_TEMPLATE: string[] = [
+  '01_To Layout Specialties',
+  '01_To Layout Specialties/00_Surveys',
+  '01_To Layout Specialties/01_AutoCAD DWGs',
+  '01_To Layout Specialties/02_PDF Plans',
+  '01_To Layout Specialties/03_Misc Data',
+  '02_From Layout Specialties',
+  '02_From Layout Specialties/01_Layout Files',
+  '02_From Layout Specialties/02_Exhibits',
+  '02_From Layout Specialties/03_Out of Date',
+];
+
+// Floors are created inside this folder (relative to the job root).
+export const FLOOR_PARENT = '01_To Layout Specialties/01_AutoCAD DWGs';
+
+// Floor options offered when creating a new job (Basement is just an option).
+export const FLOOR_OPTIONS: string[] = [
+  '00_Basement',
+  '01_First Floor',
+  '02_Second Floor',
+  '03_Third Floor',
+  '04_Fourth Floor',
+  '05_Fifth Floor',
+  '06_Sixth Floor',
+  '07_Seventh Floor',
+  '08_Eighth Floor',
+];
+
 // Turn an arbitrary label into a stable id/slug.
 export function toStatusId(label: string): string {
   return (
