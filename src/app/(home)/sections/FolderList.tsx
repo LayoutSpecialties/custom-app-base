@@ -429,6 +429,13 @@ export function FolderList({
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
+          // A failure is often a symbol Assembly rejects in file names (e.g. @).
+          // If the name has one, say so instead of a cryptic error.
+          const bad = [...new Set(name.match(/[@#%&{}<>*?\\/|":$!;=+`~^]/g) ?? [])];
+          if (bad.length)
+            throw new Error(
+              `Couldn't upload "${name}". Assembly doesn't allow these symbols in file names: ${bad.join(' ')} — rename the file and try again.`,
+            );
           throw new Error(j.error || `Upload failed (${res.status})`);
         }
         const { uploadUrl, id } = await res.json();
