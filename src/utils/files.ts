@@ -8,7 +8,12 @@ import {
   listStatuses,
 } from '@/utils/db';
 import { withRateLimitRetry } from '@/utils/retry';
-import { DWG_FOLDERS, SURVEY_FOLDER, type StatusDef } from '@/utils/status';
+import {
+  DWG_FOLDERS,
+  SURVEY_FOLDER,
+  FLOOR_PARENT,
+  type StatusDef,
+} from '@/utils/status';
 
 export interface FileItem {
   id: string;
@@ -26,6 +31,7 @@ export interface FileItem {
   isTopLevelJob?: boolean; // a top-level job folder (carries job type + includes)
   jobTypeId?: string | null; // top-level jobs only
   includeIds?: string[]; // top-level jobs only
+  existingFloors?: string[]; // floor folders already under FLOOR_PARENT (top-level jobs, root view)
 }
 
 export interface Crumb {
@@ -279,6 +285,23 @@ export async function getFolderView(
     if (!cur || u > cur) folderNewest.set(seg, u);
   }
 
+  // At the root jobs view we already have the whole channel in `files`, so
+  // collect each top-level job's existing floor folders (the direct children of
+  // its FLOOR_PARENT) for the Job details popup — no extra API call.
+  const floorsByJob = new Map<string, string[]>();
+  if (currentPath === '') {
+    for (const f of files) {
+      if (f.object !== 'folder' || typeof f.path !== 'string') continue;
+      const segs = f.path.split('/');
+      // job / <FLOOR_PARENT segments> / floor
+      if (segs.length !== 4) continue;
+      if (`${segs[1]}/${segs[2]}` !== FLOOR_PARENT) continue;
+      const arr = floorsByJob.get(segs[0]) ?? [];
+      arr.push(segs[3]);
+      floorsByJob.set(segs[0], arr);
+    }
+  }
+
   const items: FileItem[] = files
     .filter((f) => typeof f.path === 'string' && f.path.startsWith(prefix))
     .map((f) => ({ f, rel: (f.path as string).slice(prefix.length) }))
@@ -318,6 +341,9 @@ export async function getFolderView(
         isTopLevelJob,
         jobTypeId: isTopLevelJob ? (meta?.jobTypeId ?? null) : undefined,
         includeIds: isTopLevelJob ? (meta?.includeIds ?? []) : undefined,
+        existingFloors: isTopLevelJob
+          ? (floorsByJob.get(rel) ?? [])
+          : undefined,
       };
     })
     .sort((a, b) => {

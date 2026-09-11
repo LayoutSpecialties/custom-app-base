@@ -233,7 +233,8 @@ export function FolderList({
     jobTypeId: string | null;
     includeIds: string[];
     isNew?: boolean; // a brand-new job → also offer floors
-    floors: string[]; // floor folders to create (new jobs only)
+    existingFloors: string[]; // floor folders that already exist (locked, read-only)
+    floors: string[]; // floor folders to create
   } | null>(null);
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const clientStatusById = new Map(clientCategories.map((s) => [s.id, s]));
@@ -681,19 +682,20 @@ export function FolderList({
       name: item.name,
       jobTypeId: item.jobTypeId ?? null,
       includeIds: item.includeIds ?? [],
+      existingFloors: item.existingFloors ?? [],
       floors: [],
     });
   }
 
   // Save a top-level job's type + includes (client owns it; internal can edit).
-  // On a brand-new job, also create the chosen floor folders.
+  // Also create any newly-chosen floor folders (on a new job or an existing one).
   async function saveJobMeta() {
     const edit = jobMetaEdit;
     if (!edit) return;
     setBusy(true);
     setError(null);
     try {
-      if (edit.isNew && edit.floors.length > 0) {
+      if (edit.floors.length > 0) {
         const paths = edit.floors.map(
           (f) => `${edit.name}/${FLOOR_PARENT}/${f}`,
         );
@@ -1177,6 +1179,7 @@ export function FolderList({
                   jobTypeId: null,
                   includeIds: [],
                   isNew: true,
+                  existingFloors: [],
                   floors: [],
                 });
               }
@@ -1817,42 +1820,52 @@ export function FolderList({
             </Body>
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 
-            {jobMetaEdit.isNew && (
-              <div className="mt-4">
-                <div className="text-sm font-medium text-gray-700 mb-1">
-                  Floors
-                </div>
-                <div className="text-xs text-gray-500 mb-2">
-                  Created inside 01_AutoCAD DWGs.
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {FLOOR_OPTIONS.map((f) => {
-                    const on = jobMetaEdit.floors.includes(f);
-                    return (
-                      <button
-                        key={f}
-                        type="button"
-                        onClick={() =>
-                          setJobMetaEdit((s) =>
-                            s
-                              ? {
-                                  ...s,
-                                  floors: on
-                                    ? s.floors.filter((x) => x !== f)
-                                    : [...s.floors, f],
-                                }
-                              : s,
-                          )
-                        }
-                        className={`px-3 py-1 rounded-md border text-sm ${on ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                      >
-                        {f.replace(/^\d+_/, '')}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="mt-4">
+              <div className="text-sm font-medium text-gray-700 mb-1">
+                Floors
               </div>
-            )}
+              <div className="text-xs text-gray-500 mb-2">
+                Created inside 01_AutoCAD DWGs. Existing floors stay — delete the
+                folder to remove one.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {jobMetaEdit.existingFloors.map((f) => (
+                  <span
+                    key={`have-${f}`}
+                    title="Already in 01_AutoCAD DWGs"
+                    className="px-3 py-1 rounded-md border text-sm bg-gray-100 text-gray-500 border-gray-200 cursor-default"
+                  >
+                    ✓ {f.replace(/^\d+_/, '')}
+                  </span>
+                ))}
+                {FLOOR_OPTIONS.filter(
+                  (f) => !jobMetaEdit.existingFloors.includes(f),
+                ).map((f) => {
+                  const on = jobMetaEdit.floors.includes(f);
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() =>
+                        setJobMetaEdit((s) =>
+                          s
+                            ? {
+                                ...s,
+                                floors: on
+                                  ? s.floors.filter((x) => x !== f)
+                                  : [...s.floors, f],
+                              }
+                            : s,
+                        )
+                      }
+                      className={`px-3 py-1 rounded-md border text-sm ${on ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {f.replace(/^\d+_/, '')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="mt-4">
               <div className="text-sm font-medium text-gray-700 mb-1">
