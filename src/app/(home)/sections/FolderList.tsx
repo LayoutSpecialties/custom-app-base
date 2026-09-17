@@ -215,8 +215,6 @@ export function FolderList({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const prefetchedRef = useRef<Set<string>>(new Set());
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingNotifyRef = useRef<string[]>([]);
-  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const selectionBarRef = useRef<HTMLDivElement>(null);
@@ -346,29 +344,24 @@ export function FolderList({
     }
   }
 
-  // Client uploads are batched: after the last upload we wait 60s (each new
-  // upload resets the wait) then send ONE grouped email. Tab close flushes now.
-  function flushNotifications() {
-    if (notifyTimerRef.current) {
-      clearTimeout(notifyTimerRef.current);
-      notifyTimerRef.current = null;
-    }
-    const fileNames = pendingNotifyRef.current;
-    if (fileNames.length === 0) return;
-    pendingNotifyRef.current = [];
+  // Notify the internal team about a client upload immediately. We used to batch
+  // these for 60s and flush on tab close, but on phones the tab is backgrounded
+  // or closed before the timer fires (and the close-time beacon is dropped inside
+  // the iframe), so the notification was lost. Sending now is reliable. Files
+  // picked together still arrive as one call, so this stays one grouped email.
+  function notifyNow(paths: string[]) {
+    if (paths.length === 0) return;
     fetch('/api/files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, companyId, action: 'notifyUpload', fileNames }),
+      body: JSON.stringify({
+        token,
+        companyId,
+        action: 'notifyUpload',
+        fileNames: paths,
+      }),
       keepalive: true,
     }).catch(() => {});
-  }
-
-  function queueNotification(paths: string[]) {
-    if (paths.length === 0) return;
-    pendingNotifyRef.current.push(...paths);
-    if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
-    notifyTimerRef.current = setTimeout(flushNotifications, 60000);
   }
 
   async function uploadEntries(
@@ -451,10 +444,10 @@ export function FolderList({
       // Notify the team about non-survey uploads right away (batched). Survey
       // uploads are notified when the client picks a category (see the prompt),
       // so that email can include the chosen urgency.
-      if (!isInternal && otherPaths.length > 0) queueNotification(otherPaths);
+      if (!isInternal && otherPaths.length > 0) notifyNow(otherPaths);
       if (!isInternal && surveyUploads.length > 0) {
         if (clientCategories.length > 0) setSurveyPrompt(surveyUploads);
-        else queueNotification(surveyUploads.map((u) => u.path));
+        else notifyNow(surveyUploads.map((u) => u.path));
       }
       router.refresh();
     } catch (e) {
@@ -515,31 +508,6 @@ export function FolderList({
       window.removeEventListener('drop', onDrop);
     };
   }, []);
-
-  // Flush any pending upload notification if the tab is closing, so a batch
-  // isn't lost before its 60s timer fires.
-  useEffect(() => {
-    const flushOnHide = () => {
-      const fileNames = pendingNotifyRef.current;
-      if (fileNames.length === 0) return;
-      pendingNotifyRef.current = [];
-      const body = JSON.stringify({
-        token,
-        companyId,
-        action: 'notifyUpload',
-        fileNames,
-      });
-      navigator.sendBeacon?.(
-        '/api/files',
-        new Blob([body], { type: 'application/json' }),
-      );
-    };
-    window.addEventListener('pagehide', flushOnHide);
-    return () => {
-      window.removeEventListener('pagehide', flushOnHide);
-      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
-    };
-  }, [token, companyId]);
 
   async function openHistory(item: FileItem) {
     if (!channelId) return;
