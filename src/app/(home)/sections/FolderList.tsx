@@ -216,6 +216,9 @@ export function FolderList({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const prefetchedRef = useRef<Set<string>>(new Set());
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The new-job folder tree is built in the background while the setup popup is
+  // open; saveJobMeta awaits this so floors aren't created before their parent.
+  const jobTreeRef = useRef<Promise<void> | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const selectionBarRef = useRef<HTMLDivElement>(null);
@@ -342,6 +345,32 @@ export function FolderList({
       return null;
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Create a new job's standard folder tree in the background (no busy toggle),
+  // so the setup popup can open immediately instead of waiting on ~9 folder
+  // creates. Surfaces its own error; always resolves so saveJobMeta can await it.
+  async function createJobTree(paths: string[]) {
+    if (paths.length === 0) return;
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          companyId,
+          action: 'ensureFolders',
+          paths,
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error || 'Failed to create job folders');
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create job folders');
     }
   }
 
@@ -695,6 +724,9 @@ export function FolderList({
     setError(null);
     try {
       if (edit.floors.length > 0) {
+        // Floors live under FLOOR_PARENT, so wait for the background job-tree
+        // build to finish before creating them (their parent must exist first).
+        if (jobTreeRef.current) await jobTreeRef.current;
         const paths = edit.floors.map(
           (f) => `${edit.name}/${FLOOR_PARENT}/${f}`,
         );
@@ -1167,10 +1199,11 @@ export function FolderList({
               setNewFolderOpen(false);
               setNewFolderName('');
               if (result?.id && currentPath === '') {
-                // Auto-create the standard folder tree for the new job.
+                // Build the standard folder tree in the background so the setup
+                // popup appears right away (saveJobMeta awaits this before it
+                // creates any chosen floors).
                 const paths = jobTemplate.map((t) => `${name}/${t.label}`);
-                if (paths.length > 0)
-                  await postFiles({ action: 'ensureFolders', paths });
+                jobTreeRef.current = createJobTree(paths);
                 // Open the new-job setup: floors + job type/includes.
                 setJobMetaEdit({
                   folderId: result.id as string,
