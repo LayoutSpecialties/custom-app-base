@@ -193,6 +193,7 @@ export function FolderList({
   const [isPending, startTransition] = useTransition();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -371,10 +372,34 @@ export function FolderList({
     if (uploads.length === 0) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
+
+    // A Windows-tablet / phone file picker sometimes hands us two files merged
+    // into a single one, with a name like "A.txt,_B.dwg" (a file extension
+    // immediately followed by a comma). That one blob can't be split back into
+    // the real files, so skip it and tell the client to upload one at a time.
+    const isCombinedName = (n: string) => /\.[A-Za-z0-9]{1,5},/.test(n);
+    const combined = uploads.filter((u) =>
+      isCombinedName(u.relPath.split('/').pop() || ''),
+    );
+    const valid = uploads.filter((u) => !combined.includes(u));
+    if (combined.length > 0) {
+      const names = combined
+        .map((u) => u.relPath.split('/').pop())
+        .join(', ');
+      setError(
+        `This looks like two files your device combined into one — please upload them one at a time: ${names}`,
+      );
+    }
+    if (valid.length === 0) {
+      setBusy(false);
+      return;
+    }
+
     try {
       // 1) create any subfolders these files need (shallowest first)
       const folderSet = new Set<string>();
-      for (const { relPath } of uploads) {
+      for (const { relPath } of valid) {
         const parts = relPath.split('/');
         parts.pop(); // filename
         let rel = '';
@@ -406,7 +431,8 @@ export function FolderList({
       // 2) create each pending file and PUT its bytes to storage
       const surveyUploads: { id: string; path: string }[] = [];
       const otherPaths: string[] = [];
-      for (const { file, relPath } of uploads) {
+      let surveyNonTxt = false; // a non-.txt file landed in a 00_Surveys folder
+      for (const { file, relPath } of valid) {
         const parts = relPath.split('/');
         const name = parts.pop() as string;
         const parentPath = [basePath, ...parts].filter(Boolean).join('/');
@@ -437,10 +463,15 @@ export function FolderList({
         if (!put.ok)
           throw new Error(`Upload of "${name}" failed (${put.status})`);
         const fullPath = [basePath, relPath].filter(Boolean).join('/');
-        if (id && fullPath.split('/').includes(SURVEY_FOLDER))
-          surveyUploads.push({ id, path: fullPath });
+        const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
+        if (id && inSurvey) surveyUploads.push({ id, path: fullPath });
         else otherPaths.push(fullPath);
+        if (inSurvey && !name.toLowerCase().endsWith('.txt')) surveyNonTxt = true;
       }
+      // Surveys need a .txt point file. Remind the client if they added anything
+      // else (we still keep the upload — they may be including it on purpose).
+      if (!isInternal && surveyNonTxt)
+        setNotice('Layout Specialties needs a .txt file for the survey.');
       // Notify the team about non-survey uploads right away (batched). Survey
       // uploads are notified when the client picks a category (see the prompt),
       // so that email can include the chosen urgency.
@@ -1167,6 +1198,20 @@ export function FolderList({
       )}
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+
+      {notice && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <span className="flex-1">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss"
+            className="shrink-0 rounded px-1 leading-none text-amber-500 hover:bg-amber-100"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {confirmDelete && (
         <div
