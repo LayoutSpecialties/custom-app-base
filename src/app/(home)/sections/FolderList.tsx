@@ -193,7 +193,7 @@ export function FolderList({
   const [isPending, startTransition] = useTransition();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [surveyTxtWarn, setSurveyTxtWarn] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -401,7 +401,7 @@ export function FolderList({
     if (uploads.length === 0) return;
     setBusy(true);
     setError(null);
-    setNotice(null);
+    setSurveyTxtWarn(false);
 
     // A Windows-tablet / phone file picker sometimes hands us two files merged
     // into a single one, with a name like "A.txt,_B.dwg" (a file extension
@@ -460,7 +460,8 @@ export function FolderList({
       // 2) create each pending file and PUT its bytes to storage
       const surveyUploads: { id: string; path: string }[] = [];
       const otherPaths: string[] = [];
-      let surveyNonTxt = false; // a non-.txt file landed in a 00_Surveys folder
+      let surveyCount = 0; // files landing in a 00_Surveys folder
+      let surveyTxtCount = 0; // ...of which are .txt point files
       for (const { file, relPath } of valid) {
         const parts = relPath.split('/');
         const name = parts.pop() as string;
@@ -495,12 +496,16 @@ export function FolderList({
         const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
         if (id && inSurvey) surveyUploads.push({ id, path: fullPath });
         else otherPaths.push(fullPath);
-        if (inSurvey && !name.toLowerCase().endsWith('.txt')) surveyNonTxt = true;
+        if (inSurvey) {
+          surveyCount++;
+          if (name.toLowerCase().endsWith('.txt')) surveyTxtCount++;
+        }
       }
-      // Surveys need a .txt point file. Remind the client if they added anything
-      // else (we still keep the upload — they may be including it on purpose).
-      if (!isInternal && surveyNonTxt)
-        setNotice('Layout Specialties needs a .txt file for the survey.');
+      // Surveys need a .txt point file. Only warn when files went into a survey
+      // folder but NONE of them is a .txt — a .txt uploaded alongside a .dwg (or
+      // anything else) satisfies the requirement, so it shouldn't flag.
+      if (!isInternal && surveyCount > 0 && surveyTxtCount === 0)
+        setSurveyTxtWarn(true);
       // Notify the team about non-survey uploads right away (batched). Survey
       // uploads are notified when the client picks a category (see the prompt),
       // so that email can include the chosen urgency.
@@ -1232,20 +1237,6 @@ export function FolderList({
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
 
-      {notice && (
-        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <span className="flex-1">{notice}</span>
-          <button
-            type="button"
-            onClick={() => setNotice(null)}
-            aria-label="Dismiss"
-            className="shrink-0 rounded px-1 leading-none text-amber-500 hover:bg-amber-100"
-          >
-            &times;
-          </button>
-        </div>
-      )}
-
       {confirmDelete && (
         <div
           className="sticky z-20 mb-3 flex items-center gap-3 p-3 rounded-md border border-red-200 bg-red-50 text-sm"
@@ -1844,6 +1835,30 @@ export function FolderList({
                   <span className="text-sm text-gray-800">{c.label}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sits above the urgency picker (z-50 > z-40): the client must click
+          Understood before they can choose how soon they need it. */}
+      {surveyTxtWarn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+            <Heading size="lg">A survey .txt file is needed</Heading>
+            <Body size="sm" className="text-gray-600 mt-2">
+              Layout Specialties needs a .txt file for the survey. If you
+              haven&rsquo;t added one yet, please upload the .txt file into this
+              Surveys folder.
+            </Body>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSurveyTxtWarn(false)}
+                className="text-sm px-4 py-1.5 rounded-md bg-gray-900 text-white"
+              >
+                Understood
+              </button>
             </div>
           </div>
         </div>
