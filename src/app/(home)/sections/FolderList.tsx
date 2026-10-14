@@ -1617,7 +1617,7 @@ export function FolderList({
                       Open link
                     </a>
                   )}
-                  {item.object === 'folder' && (
+                  {(item.object === 'folder' || item.isSurveyFile) && (
                     <button
                       type="button"
                       className={menuItemClass}
