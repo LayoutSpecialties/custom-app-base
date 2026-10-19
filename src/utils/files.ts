@@ -144,8 +144,24 @@ export async function listAllFiles(
   const all: RawFile[] = [];
   let nextToken: string | undefined;
   let guard = 0;
+  // listFiles defaults to 100 per page; a channel with many jobs then needs
+  // many sequential round trips (the dominant cost at the root view). Ask for
+  // large pages to collapse those into one or two. If the API rejects the big
+  // page size, fall back to 100 for the same cursor and carry on — so a stricter
+  // server-side cap can never break the listing, only make it slower.
+  let limit = 1000;
   do {
-    const res = await assembly.listFiles({ channelId, path, nextToken });
+    let res;
+    try {
+      res = await assembly.listFiles({ channelId, path, nextToken, limit });
+    } catch (e) {
+      if (limit > 100) {
+        limit = 100;
+        res = await assembly.listFiles({ channelId, path, nextToken, limit });
+      } else {
+        throw e;
+      }
+    }
     if (res.data) all.push(...(res.data as RawFile[]));
     nextToken = (res as { nextToken?: string }).nextToken;
   } while (nextToken && ++guard < 100);
