@@ -112,8 +112,17 @@ type HistoryEntry = {
 
 type Upload = { file: File; relPath: string };
 
-// An upload error that retrying won't fix (e.g. a file name Assembly rejects).
-class FatalUploadError extends Error {}
+// An upload error that retrying right now won't fix (e.g. a file name Assembly
+// rejects). `retryable` marks ones the user can safely retry later from the
+// failure list (e.g. contents didn't send and the empty copy was removed).
+class FatalUploadError extends Error {
+  constructor(
+    message: string,
+    public retryable = false,
+  ) {
+    super(message);
+  }
+}
 
 // Run fn up to `tries` times with a short growing pause, so a passing network
 // blip or busy server doesn't lose a file. A FatalUploadError stops at once.
@@ -213,6 +222,14 @@ export function FolderList({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [surveyTxtWarn, setSurveyTxtWarn] = useState(false);
+  // Files from the last upload that failed but can be resent as-is, plus the
+  // folder they were going to. `message` ties the Retry button to the error it
+  // belongs to, so it never shows under some unrelated later error.
+  const [failedRetry, setFailedRetry] = useState<{
+    uploads: Upload[];
+    basePath: string;
+    message: string;
+  } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
     done: number;
     total: number;
@@ -425,6 +442,7 @@ export function FolderList({
     setBusy(true);
     setError(null);
     setSurveyTxtWarn(false);
+    setFailedRetry(null);
 
     // A Windows-tablet / phone file picker sometimes hands us two files merged
     // into a single one, with a name like "A.txt,_B.dwg" (a file extension
@@ -491,6 +509,7 @@ export function FolderList({
       const surveyUploads: { id: string; path: string }[] = [];
       const otherPaths: string[] = [];
       const failed: string[] = [];
+      const retryList: Upload[] = []; // failed files safe to resend as-is
       let surveyCount = 0; // files landing in a 00_Surveys folder
       let surveyTxtCount = 0; // ...of which are .txt point files
       for (let i = 0; i < valid.length; i++) {
@@ -541,11 +560,11 @@ export function FolderList({
               // The entry exists but is empty — remove it so it doesn't sit in
               // the folder looking like a real upload.
               const removed = id ? await discardPlaceholder(id) : false;
-              throw new FatalUploadError(
-                removed
-                  ? "the file's contents didn't finish sending"
-                  : "the file's contents didn't finish sending — delete the empty copy before uploading again",
-              );
+              throw removed
+                ? new FatalUploadError("the file's contents didn't finish sending", true)
+                : new FatalUploadError(
+                    "the file's contents didn't finish sending — delete the empty copy, then upload it again",
+                  );
             }
           }
           const fullPath = [basePath, relPath].filter(Boolean).join('/');
@@ -564,6 +583,8 @@ export function FolderList({
                 ? e.message
                 : 'failed';
           failed.push(`${relPath} (${why})`);
+          if (!(e instanceof FatalUploadError) || e.retryable)
+            retryList.push(valid[i]);
         }
         setUploadProgress({ done: i + 1, total: valid.length });
       }
@@ -572,9 +593,12 @@ export function FolderList({
         const more =
           failed.length > 10 ? `\n…and ${failed.length - 10} more` : '';
         problems.push(
-          `${failed.length} of ${valid.length} files didn't upload — please upload these again:\n${shown}${more}`,
+          `${failed.length} of ${valid.length} files didn't upload:\n${shown}${more}`,
         );
-        setError(problems.join('\n\n'));
+        const message = problems.join('\n\n');
+        setError(message);
+        if (retryList.length > 0)
+          setFailedRetry({ uploads: retryList, basePath, message });
       }
       // Surveys need a .txt point file. Only warn when files went into a survey
       // folder but NONE of them is a .txt — a .txt uploaded alongside a .dwg (or
@@ -591,7 +615,14 @@ export function FolderList({
       }
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
+      // Only reached if the batch couldn't start (e.g. its folders couldn't be
+      // created) — no files went up, so the whole batch is safe to retry.
+      const message = [
+        ...problems,
+        `Upload didn't start: ${e instanceof Error ? e.message : 'failed'}`,
+      ].join('\n\n');
+      setError(message);
+      setFailedRetry({ uploads: valid, basePath, message });
     } finally {
       setBusy(false);
       setUploadProgress(null);
@@ -1371,6 +1402,20 @@ export function FolderList({
       {error && (
         <div className="mb-3 whitespace-pre-line text-sm text-red-600">
           {error}
+          {failedRetry && failedRetry.message === error && (
+            <div className="mt-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  uploadEntries(failedRetry.uploads, failedRetry.basePath)
+                }
+                className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-40"
+              >
+                Retry failed files ({failedRetry.uploads.length})
+              </button>
+            </div>
+          )}
         </div>
       )}
 
