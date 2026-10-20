@@ -22,13 +22,14 @@ export async function POST(request: Request) {
       | 'ensureFolders'
       | 'delete'
       | 'notifyUpload'
-      | 'checkUpload';
+      | 'checkUpload'
+      | 'discardUpload';
     path?: string; // parent folder path (newFolder/upload) or item path (delete)
     name?: string; // new folder/file name
     paths?: string[]; // folder paths to ensure (for ensureFolders)
     fileNames?: string[]; // uploaded file names (for notifyUpload)
     category?: string; // client-chosen urgency (for notifyUpload of survey files)
-    fileId?: string; // item id (for delete / checkUpload)
+    fileId?: string; // item id (for delete / checkUpload / discardUpload)
     object?: 'folder' | 'file' | 'link';
   };
 
@@ -180,6 +181,23 @@ export async function POST(request: Request) {
         if (f.channelId !== channelId)
           return Response.json({ error: 'File not found' }, { status: 404 });
         return Response.json({ size: f.size ?? null, status: f.status ?? null });
+      }
+
+      case 'discardUpload': {
+        // Remove the empty placeholder left when a file's bytes never reached
+        // storage. Guarded server-side: only ever deletes a FILE in this
+        // channel whose stored size is zero/missing — never one with content.
+        if (!body.fileId)
+          return Response.json({ error: 'fileId is required' }, { status: 400 });
+        const f = await withRateLimitRetry(() =>
+          assembly.retrieveFile({ id: body.fileId! }),
+        );
+        if (f.channelId !== channelId)
+          return Response.json({ error: 'File not found' }, { status: 404 });
+        if (f.object !== 'file' || (f.size ?? 0) > 0)
+          return Response.json({ ok: false });
+        await withRateLimitRetry(() => assembly.deleteFile({ id: body.fileId! }));
+        return Response.json({ ok: true });
       }
 
       case 'newFolder': {

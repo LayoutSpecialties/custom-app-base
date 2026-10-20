@@ -526,18 +526,27 @@ export function FolderList({
             throw new Error(j.error || `failed (${res.status})`);
           });
           // Retry the byte upload against the same URL (valid 15 min) rather
-          // than creating the file again.
+          // than creating the file again. Five tries (~10s of waiting) so a
+          // connection blip of several seconds on a tablet doesn't lose it.
           try {
             await tryTimes(async () => {
               const put = await fetch(uploadUrl, { method: 'PUT', body: file });
               if (!put.ok) throw new Error(`failed (${put.status})`);
-            });
+            }, 5);
           } catch {
             // The browser can lose the storage server's reply even though the
             // bytes arrived. Before calling it a failure, ask Assembly whether
             // the stored size matches what we sent.
-            if (!(id && (await uploadLanded(id, file.size))))
-              throw new FatalUploadError("the file's contents didn't finish sending");
+            if (!(id && (await uploadLanded(id, file.size)))) {
+              // The entry exists but is empty — remove it so it doesn't sit in
+              // the folder looking like a real upload.
+              const removed = id ? await discardPlaceholder(id) : false;
+              throw new FatalUploadError(
+                removed
+                  ? "the file's contents didn't finish sending"
+                  : "the file's contents didn't finish sending — delete the empty copy before uploading again",
+              );
+            }
           }
           const fullPath = [basePath, relPath].filter(Boolean).join('/');
           const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
@@ -609,6 +618,22 @@ export function FolderList({
       }
     }
     return false;
+  }
+
+  // Delete the empty entry left by a failed upload (server only deletes it if
+  // its stored size is zero). True if it was removed.
+  async function discardPlaceholder(fileId: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, companyId, action: 'discardUpload', fileId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean };
+      return res.ok && j.ok === true;
+    } catch {
+      return false;
+    }
   }
 
   // Uploads run in this page one file at a time, so closing or reloading it
