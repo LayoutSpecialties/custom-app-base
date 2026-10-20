@@ -112,6 +112,25 @@ type HistoryEntry = {
 
 type Upload = { file: File; relPath: string };
 
+// An upload error that retrying won't fix (e.g. a file name Assembly rejects).
+class FatalUploadError extends Error {}
+
+// Run fn up to `tries` times with a short growing pause, so a passing network
+// blip or busy server doesn't lose a file. A FatalUploadError stops at once.
+async function tryTimes<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  let err: unknown;
+  for (let i = 0; i < tries; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000 * i));
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof FatalUploadError) throw e;
+      err = e;
+    }
+  }
+  throw err;
+}
+
 // Read every entry from a directory reader (it returns them in batches).
 function readAllEntries(
   reader: FileSystemDirectoryReader,
@@ -194,6 +213,10 @@ export function FolderList({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [surveyTxtWarn, setSurveyTxtWarn] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -412,19 +435,22 @@ export function FolderList({
       isCombinedName(u.relPath.split('/').pop() || ''),
     );
     const valid = uploads.filter((u) => !combined.includes(u));
+    const problems: string[] = [];
     if (combined.length > 0) {
       const names = combined
         .map((u) => u.relPath.split('/').pop())
         .join(', ');
-      setError(
+      problems.push(
         `This looks like two files your device combined into one — please upload them one at a time: ${names}`,
       );
+      setError(problems.join('\n'));
     }
     if (valid.length === 0) {
       setBusy(false);
       return;
     }
 
+    setUploadProgress({ done: 0, total: valid.length });
     try {
       // 1) create any subfolders these files need (shallowest first)
       const folderSet = new Set<string>();
@@ -441,65 +467,97 @@ export function FolderList({
         (a, b) => a.split('/').length - b.split('/').length,
       );
       if (folderPaths.length > 0) {
-        const res = await fetch('/api/files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token,
-            companyId,
-            action: 'ensureFolders',
-            paths: folderPaths,
-          }),
+        await tryTimes(async () => {
+          const res = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token,
+              companyId,
+              action: 'ensureFolders',
+              paths: folderPaths,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || 'Failed to create folders');
+          }
         });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || 'Failed to create folders');
-        }
       }
 
-      // 2) create each pending file and PUT its bytes to storage
+      // 2) create each pending file and PUT its bytes to storage. Each file is
+      // retried on a passing hiccup, and one failed file no longer stops the
+      // rest of the batch — failures are collected and listed at the end.
       const surveyUploads: { id: string; path: string }[] = [];
       const otherPaths: string[] = [];
+      const failed: string[] = [];
       let surveyCount = 0; // files landing in a 00_Surveys folder
       let surveyTxtCount = 0; // ...of which are .txt point files
-      for (const { file, relPath } of valid) {
+      for (let i = 0; i < valid.length; i++) {
+        const { file, relPath } = valid[i];
         const parts = relPath.split('/');
         const name = parts.pop() as string;
         const parentPath = [basePath, ...parts].filter(Boolean).join('/');
-        const res = await fetch('/api/files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token,
-            companyId,
-            action: 'upload',
-            path: parentPath,
-            name,
-          }),
-        });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          // A failure is often a symbol Assembly rejects in file names (e.g. @).
-          // If the name has one, say so instead of a cryptic error.
-          const bad = [...new Set(name.match(/[@#%&{}<>*?\\/|":$!;=+`~^]/g) ?? [])];
-          if (bad.length)
-            throw new Error(
-              `Couldn't upload "${name}". Assembly doesn't allow these symbols in file names: ${bad.join(' ')} — rename the file and try again.`,
-            );
-          throw new Error(j.error || `Upload failed (${res.status})`);
+        try {
+          const { uploadUrl, id } = await tryTimes(async () => {
+            const res = await fetch('/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token,
+                companyId,
+                action: 'upload',
+                path: parentPath,
+                name,
+              }),
+            });
+            if (res.ok)
+              return (await res.json()) as { uploadUrl: string; id?: string };
+            const j = await res.json().catch(() => ({}));
+            // A failure is often a symbol Assembly rejects in file names (e.g.
+            // @). If the name has one, say so — retrying won't help.
+            const bad = [
+              ...new Set(name.match(/[@#%&{}<>*?\\/|":$!;=+`~^]/g) ?? []),
+            ];
+            if (bad.length)
+              throw new FatalUploadError(
+                `Assembly doesn't allow ${bad.join(' ')} in file names — rename it`,
+              );
+            throw new Error(j.error || `failed (${res.status})`);
+          });
+          // Retry the byte upload against the same URL (valid 15 min) rather
+          // than creating the file again.
+          await tryTimes(async () => {
+            const put = await fetch(uploadUrl, { method: 'PUT', body: file });
+            if (!put.ok) throw new Error(`failed (${put.status})`);
+          });
+          const fullPath = [basePath, relPath].filter(Boolean).join('/');
+          const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
+          if (id && inSurvey) surveyUploads.push({ id, path: fullPath });
+          else otherPaths.push(fullPath);
+          if (inSurvey) {
+            surveyCount++;
+            if (name.toLowerCase().endsWith('.txt')) surveyTxtCount++;
+          }
+        } catch (e) {
+          const why =
+            e instanceof TypeError
+              ? 'connection dropped'
+              : e instanceof Error
+                ? e.message
+                : 'failed';
+          failed.push(`${relPath} (${why})`);
         }
-        const { uploadUrl, id } = await res.json();
-        const put = await fetch(uploadUrl, { method: 'PUT', body: file });
-        if (!put.ok)
-          throw new Error(`Upload of "${name}" failed (${put.status})`);
-        const fullPath = [basePath, relPath].filter(Boolean).join('/');
-        const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
-        if (id && inSurvey) surveyUploads.push({ id, path: fullPath });
-        else otherPaths.push(fullPath);
-        if (inSurvey) {
-          surveyCount++;
-          if (name.toLowerCase().endsWith('.txt')) surveyTxtCount++;
-        }
+        setUploadProgress({ done: i + 1, total: valid.length });
+      }
+      if (failed.length > 0) {
+        const shown = failed.slice(0, 10).join('\n');
+        const more =
+          failed.length > 10 ? `\n…and ${failed.length - 10} more` : '';
+        problems.push(
+          `${failed.length} of ${valid.length} files didn't upload — please upload these again:\n${shown}${more}`,
+        );
+        setError(problems.join('\n\n'));
       }
       // Surveys need a .txt point file. Only warn when files went into a survey
       // folder but NONE of them is a .txt — a .txt uploaded alongside a .dwg (or
@@ -519,8 +577,21 @@ export function FolderList({
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setBusy(false);
+      setUploadProgress(null);
     }
   }
+
+  // Uploads run in this page one file at a time, so closing or reloading it
+  // mid-upload drops the remaining files. Ask the browser to warn first.
+  useEffect(() => {
+    if (!uploadProgress) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [uploadProgress]);
 
   function uploadFileList(files: FileList) {
     // Folder picker gives webkitRelativePath (e.g. "MyFolder/sub/a.txt");
@@ -1235,7 +1306,18 @@ export function FolderList({
         </div>
       )}
 
-      {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+      {uploadProgress && (
+        <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          Uploading {uploadProgress.done} of {uploadProgress.total} files… Please
+          stay on this page until it finishes.
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-3 whitespace-pre-line text-sm text-red-600">
+          {error}
+        </div>
+      )}
 
       {confirmDelete && (
         <div
