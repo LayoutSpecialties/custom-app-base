@@ -21,13 +21,14 @@ export async function POST(request: Request) {
       | 'newFolder'
       | 'ensureFolders'
       | 'delete'
-      | 'notifyUpload';
+      | 'notifyUpload'
+      | 'checkUpload';
     path?: string; // parent folder path (newFolder/upload) or item path (delete)
     name?: string; // new folder/file name
     paths?: string[]; // folder paths to ensure (for ensureFolders)
     fileNames?: string[]; // uploaded file names (for notifyUpload)
     category?: string; // client-chosen urgency (for notifyUpload of survey files)
-    fileId?: string; // item id (for delete)
+    fileId?: string; // item id (for delete / checkUpload)
     object?: 'folder' | 'file' | 'link';
   };
 
@@ -166,6 +167,19 @@ export async function POST(request: Request) {
           category: typeof body.category === 'string' ? body.category : undefined,
         });
         return Response.json({ ok: true });
+      }
+
+      case 'checkUpload': {
+        // Report a just-uploaded file's stored size, so the browser can tell
+        // whether its bytes really arrived when it lost the storage reply.
+        if (!body.fileId)
+          return Response.json({ error: 'fileId is required' }, { status: 400 });
+        const f = await withRateLimitRetry(() =>
+          assembly.retrieveFile({ id: body.fileId! }),
+        );
+        if (f.channelId !== channelId)
+          return Response.json({ error: 'File not found' }, { status: 404 });
+        return Response.json({ size: f.size ?? null, status: f.status ?? null });
       }
 
       case 'newFolder': {

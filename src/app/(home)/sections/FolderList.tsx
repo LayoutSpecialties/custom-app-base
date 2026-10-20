@@ -527,10 +527,18 @@ export function FolderList({
           });
           // Retry the byte upload against the same URL (valid 15 min) rather
           // than creating the file again.
-          await tryTimes(async () => {
-            const put = await fetch(uploadUrl, { method: 'PUT', body: file });
-            if (!put.ok) throw new Error(`failed (${put.status})`);
-          });
+          try {
+            await tryTimes(async () => {
+              const put = await fetch(uploadUrl, { method: 'PUT', body: file });
+              if (!put.ok) throw new Error(`failed (${put.status})`);
+            });
+          } catch {
+            // The browser can lose the storage server's reply even though the
+            // bytes arrived. Before calling it a failure, ask Assembly whether
+            // the stored size matches what we sent.
+            if (!(id && (await uploadLanded(id, file.size))))
+              throw new FatalUploadError("the file's contents didn't finish sending");
+          }
           const fullPath = [basePath, relPath].filter(Boolean).join('/');
           const inSurvey = fullPath.split('/').includes(SURVEY_FOLDER);
           if (id && inSurvey) surveyUploads.push({ id, path: fullPath });
@@ -542,7 +550,7 @@ export function FolderList({
         } catch (e) {
           const why =
             e instanceof TypeError
-              ? 'connection dropped'
+              ? 'couldn’t reach the server'
               : e instanceof Error
                 ? e.message
                 : 'failed';
@@ -579,6 +587,28 @@ export function FolderList({
       setBusy(false);
       setUploadProgress(null);
     }
+  }
+
+  // Did a file's bytes really reach storage? Compare Assembly's stored size to
+  // the local file's size; checked twice in case the size lags a moment.
+  async function uploadLanded(fileId: string, size: number): Promise<boolean> {
+    for (let i = 0; i < 2; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, companyId, action: 'checkUpload', fileId }),
+        });
+        if (res.ok) {
+          const j = (await res.json()) as { size?: number | null };
+          if (typeof j.size === 'number' && j.size === size) return true;
+        }
+      } catch {
+        /* try again */
+      }
+    }
+    return false;
   }
 
   // Uploads run in this page one file at a time, so closing or reloading it
