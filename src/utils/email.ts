@@ -4,6 +4,8 @@
 //   NOTIFY_TO       - recipient(s), comma-separated
 //   RESEND_FROM     - sender address (defaults to Resend's test sender)
 
+import { SURVEY_FOLDER } from '@/utils/status';
+
 function escapeHtml(s: string): string {
   return s.replace(
     /[&<>"']/g,
@@ -38,9 +40,16 @@ export async function sendUploadNotification(opts: {
     ? `<p style="margin:16px 0 4px;">How soon they need it:</p>` +
       `<p style="font-size:20px;font-weight:700;margin:0 0 16px;">${escapeHtml(opts.category)}</p>`
     : '';
-  const subject =
-    `New file upload${opts.companyName ? ` from ${opts.companyName}` : ''}` +
-    (opts.category ? ` — ${opts.category}` : '');
+  // Survey uploads get their own subject so they stand out from regular file
+  // uploads, e.g. "Survey uploaded from Botmark Inc - ASAP". fileNames are full
+  // paths, so a file in a 00_Surveys folder marks it as a survey too.
+  const isSurvey =
+    !!opts.category ||
+    opts.fileNames.some((n) => n.split('/').includes(SURVEY_FOLDER));
+  const from_ = opts.companyName ? ` from ${opts.companyName}` : '';
+  const subject = isSurvey
+    ? `Survey uploaded${from_}${opts.category ? ` - ${opts.category}` : ''}`
+    : `New file upload${from_}`;
   const html =
     `<p>${who} uploaded ${count} file${count === 1 ? '' : 's'} in the client portal:</p>` +
     categoryBlock +
