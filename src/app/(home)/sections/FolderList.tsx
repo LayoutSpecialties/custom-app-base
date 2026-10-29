@@ -998,7 +998,10 @@ export function FolderList({
       ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
       let longest = 0;
       names.forEach((el) => {
-        const w = ctx.measureText(el.textContent ?? '').width;
+        // Plus any room a row reserves for a control beside its name.
+        const w =
+          ctx.measureText(el.textContent ?? '').width +
+          Number(el.dataset.reserve ?? 0);
         if (w > longest) longest = w;
       });
       setStacked(longest > avail - 4);
@@ -1142,69 +1145,47 @@ export function FolderList({
     );
   }
 
-  // The client category on a survey file: editable by the client, read-only for
-  // internal viewers (the mirror of statusControl).
-  function clientStatusControl(item: FileItem, fullWidth = false) {
+  // The client's Priority (how soon they need it) on a survey file. Shown next
+  // to the file name, where top-level jobs show "Set job type", so the Status
+  // column stays free for the status we set. Editable by the client, read-only
+  // for internal viewers.
+  function clientStatusControl(item: FileItem) {
     const cat = item.clientStatusId
       ? clientStatusById.get(item.clientStatusId)
       : undefined;
-    return !isInternal ? (
-      <div className={`flex items-center gap-2 min-w-0 ${fullWidth ? 'w-full' : ''}`}>
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1.5 text-xs text-gray-500">
+        Priority:
         <StatusDot color={cat?.color ?? UNSET_COLOR} />
-        <select
-          className={`text-sm border border-gray-300 rounded-md px-2 py-1 bg-white disabled:opacity-50 min-w-0 ${fullWidth ? 'w-full' : ''}`}
-          value={item.clientStatusId ?? ''}
-          disabled={pendingId === item.id}
-          onChange={(e) => changeClientStatus(item.id, e.target.value)}
-        >
-          <option value="">No category</option>
-          {clientCategories.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    ) : (
-      <span className="inline-flex items-center gap-1.5 text-sm text-gray-700 shrink-0">
-        <StatusDot color={cat?.color ?? UNSET_COLOR} />
-        {cat?.label ?? 'No category'}
+        {isInternal ? (
+          <span className="text-gray-700">{cat?.label ?? 'No category'}</span>
+        ) : (
+          <select
+            aria-label="Priority"
+            className="text-xs border border-gray-300 rounded-md px-1.5 py-0.5 bg-white text-gray-700 disabled:opacity-50"
+            value={item.clientStatusId ?? ''}
+            disabled={pendingId === item.id}
+            onChange={(e) => changeClientStatus(item.id, e.target.value)}
+          >
+            <option value="">No category</option>
+            {clientCategories.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        )}
       </span>
     );
   }
 
-  // What goes in the Status column for a row: a folder's internal status, or a
-  // survey file's client category, or nothing.
+  // What goes in the Status column for a row: a folder's or survey file's
+  // internal status (the one we set), or nothing. A survey file's Priority sits
+  // next to its name instead (see clientStatusControl).
   function statusSlot(item: FileItem, status?: StatusDef, fullWidth = false) {
     if (item.object === 'folder')
       return item.statusEligible ? statusControl(item, status, fullWidth) : null;
-    if (item.isSurveyFile) {
-      // Survey files show BOTH the client's Priority (left/top) and our internal
-      // Status (right/bottom) — so the client can see we're on it. Side by side
-      // when there's room, stacked (Priority over Status) when narrow. Clients
-      // only see our status once we've actually set one.
-      const showOurStatus = isInternal || !!item.statusId;
-      const labelClass =
-        'text-[10px] uppercase tracking-wide text-gray-400 leading-none mb-0.5';
-      return (
-        <div
-          className={
-            stacked ? 'flex flex-col gap-1' : 'flex flex-row items-start gap-6'
-          }
-        >
-          <div className="min-w-0">
-            <div className={labelClass}>Priority</div>
-            {clientStatusControl(item, fullWidth)}
-          </div>
-          {showOurStatus && (
-            <div className="min-w-0">
-              <div className={labelClass}>Status</div>
-              {statusControl(item, status, fullWidth)}
-            </div>
-          )}
-        </div>
-      );
-    }
+    if (item.isSurveyFile) return statusControl(item, status, fullWidth);
     return null;
   }
 
@@ -1692,12 +1673,16 @@ export function FolderList({
                         ) : (
                           <span
                             data-name
+                            // Room for the inline Priority control, so the
+                            // stack decision keeps survey names fully readable.
+                            data-reserve={item.isSurveyFile ? 190 : undefined}
                             title={item.name}
                             className={`min-w-0 flex-1 text-sm font-medium text-gray-900 ${stacked ? 'break-words' : 'truncate'}`}
                           >
                             {item.name}
                           </span>
                         )}
+                        {!stacked && item.isSurveyFile && clientStatusControl(item)}
                         {!stacked && currentPath === '' && item.isTopLevelJob && (
                           <button
                             type="button"
@@ -1727,6 +1712,7 @@ export function FolderList({
                             {jobTag(item) || 'Set job type'}
                           </button>
                         )}
+                        {item.isSurveyFile && clientStatusControl(item)}
                         {statusSlot(item, status, true)}
                         {item.creatorName && (
                           <div className="text-xs text-gray-500">
