@@ -1,5 +1,6 @@
 import { assemblyClient } from '@/utils/assembly';
 import {
+  getAnnouncement,
   getArchivedSet,
   getFileClientStatusMap,
   getFileCreatorMap,
@@ -55,6 +56,7 @@ export interface FolderView {
   jobTypes: StatusDef[]; // job type options (top-level jobs)
   includes: StatusDef[]; // include options (top-level jobs)
   jobTemplate: StatusDef[]; // standard subfolders auto-created for a new job (label = path)
+  announcement: string; // banner shown to every client company ('' = none)
   currentPath: string;
   breadcrumb: Crumb[];
   items: FileItem[];
@@ -187,20 +189,28 @@ export async function getFolderView(
   const payload = await assembly.getTokenPayload?.();
   const isInternal = !!payload?.internalUserId;
 
-  const [statuses, clientCategories, jobTypes, includes, jobTemplate] =
-    await Promise.all([
-      listStatuses('internal'),
-      listStatuses('client'),
-      listStatuses('job_type'),
-      listStatuses('include'),
-      listStatuses('job_folder'),
-    ]);
+  const [
+    statuses,
+    clientCategories,
+    jobTypes,
+    includes,
+    jobTemplate,
+    announcement,
+  ] = await Promise.all([
+    listStatuses('internal'),
+    listStatuses('client'),
+    listStatuses('job_type'),
+    listStatuses('include'),
+    listStatuses('job_folder'),
+    getAnnouncement(),
+  ]);
   const empty = {
     statuses,
     clientCategories,
     jobTypes,
     includes,
     jobTemplate,
+    announcement,
     currentPath: '',
     breadcrumb: [],
     items: [],
@@ -427,6 +437,7 @@ export async function getFolderView(
     jobTypes,
     includes,
     jobTemplate,
+    announcement,
     currentPath,
     breadcrumb,
     items: visibleItems,

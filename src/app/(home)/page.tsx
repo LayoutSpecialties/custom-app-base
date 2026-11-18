@@ -54,8 +54,18 @@ async function Content({ searchParams }: { searchParams: SearchParams }) {
               jobTypes={view.jobTypes}
               includes={view.includes}
               jobTemplate={view.jobTemplate}
+              announcement={view.announcement}
               token={token}
             />
+          </div>
+        )}
+        {/* Client announcement: at the top of every folder view, in normal flow
+            so it scrolls away (the toolbar below still pins). Set by staff in
+            Manage statuses; empty = no banner. */}
+        {!view.isInternal && view.announcement && (
+          <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            <div className="mb-1 font-semibold">Announcement</div>
+            <div className="whitespace-pre-line">{view.announcement}</div>
           </div>
         )}
         <FolderList

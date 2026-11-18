@@ -109,6 +109,13 @@ async function ready() {
       updated_at  timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (channel_id, folder_id)
     )`;
+    // App-wide settings (not per channel), e.g. the client announcement.
+    await sql`CREATE TABLE IF NOT EXISTS app_settings (
+      key        text PRIMARY KEY,
+      value      text NOT NULL DEFAULT '',
+      updated_by text,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
     const seed = async (kind: StatusKind, defs: Omit<StatusDef, 'id'>[]) => {
       const n = (
         (await sql`SELECT count(*)::int AS n FROM statuses WHERE kind = ${kind}`) as {
@@ -158,6 +165,29 @@ export async function listStatuses(
     color: r.color,
     sortOrder: r.sort_order,
   }));
+}
+
+// The announcement banner shown to every client company ('' = no banner).
+export async function getAnnouncement(): Promise<string> {
+  const sql = await ready();
+  if (!sql) return '';
+  const rows = (await sql`SELECT value FROM app_settings
+                          WHERE key = 'announcement'`) as { value: string }[];
+  return rows[0]?.value ?? '';
+}
+
+export async function setAnnouncement(
+  text: string,
+  updatedBy?: string,
+): Promise<void> {
+  const sql = await ready();
+  if (!sql) throw new Error('Database not configured');
+  await sql`INSERT INTO app_settings (key, value, updated_by, updated_at)
+            VALUES ('announcement', ${text}, ${updatedBy ?? null}, now())
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value,
+                          updated_by = EXCLUDED.updated_by,
+                          updated_at = now()`;
 }
 
 // folder_id -> status_id for a channel (only folders with a status set).

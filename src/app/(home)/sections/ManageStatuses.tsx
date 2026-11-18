@@ -107,12 +107,97 @@ function StatusSection({
   );
 }
 
+// The banner every client company sees at the top of LS Files. Saving empty
+// text removes the banner.
+function AnnouncementSection({
+  announcement,
+  token,
+}: {
+  announcement: string;
+  token?: string;
+}) {
+  const router = useRouter();
+  const [text, setText] = useState(announcement);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const dirty = text.trim() !== announcement;
+
+  async function save(value: string) {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch('/api/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, text: value }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `Failed (${res.status})`);
+      }
+      setText(value.trim());
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-2">
+        <Heading size="lg">Client announcement</Heading>
+        <Body size="sm" className="text-gray-500 mt-1">
+          Shown in a banner at the top of LS Files for every client company.
+          Clear it to remove the banner.{' '}
+          {announcement ? (
+            <span className="font-medium text-blue-700">Live now.</span>
+          ) : (
+            <span>No banner showing.</span>
+          )}
+        </Body>
+      </div>
+      {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+      <textarea
+        value={text}
+        disabled={busy}
+        maxLength={1000}
+        rows={3}
+        placeholder="e.g. Our office is closed Nov 26–27 for Thanksgiving."
+        onChange={(e) => setText(e.target.value)}
+        aria-label="Client announcement"
+        className="w-full text-sm border border-gray-300 rounded-md px-2 py-1"
+      />
+      <div className="mt-2 flex justify-end gap-2">
+        <button
+          type="button"
+          disabled={busy || !announcement}
+          onClick={() => save('')}
+          className="text-sm px-3 py-1 rounded-md text-red-600 disabled:opacity-30"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          disabled={busy || !dirty}
+          onClick={() => save(text)}
+          className="text-sm px-3 py-1 rounded-md bg-gray-900 text-white disabled:opacity-30"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ManageStatuses({
   statuses,
   clientCategories,
   jobTypes,
   includes,
   jobTemplate,
+  announcement,
   token,
 }: {
   statuses: StatusDef[];
@@ -120,6 +205,7 @@ export function ManageStatuses({
   jobTypes: StatusDef[];
   includes: StatusDef[];
   jobTemplate: StatusDef[];
+  announcement: string;
   token?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -156,6 +242,7 @@ export function ManageStatuses({
               </button>
             </div>
             <div className="space-y-6 overflow-auto p-4">
+            <AnnouncementSection announcement={announcement} token={token} />
             <StatusSection
               title="Statuses"
               description="Rename, recolor, reorder, add, or remove the statuses your team can assign to folders."
